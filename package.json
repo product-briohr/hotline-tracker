@@ -1,0 +1,20 @@
+{
+  "name": "hotline-tracker-netlify",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "netlify dev",
+    "start": "netlify dev",
+    "build": "echo \"No build step required\"",
+    "deploy": "netlify deploy --prod"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@netlify/blobs": "^9.1.0",
+    "google-auth-library": "^9.15.1"
+  },
+  "devDependencies": {
+    "netlify-cli": "18.0.1"
+  }
+}

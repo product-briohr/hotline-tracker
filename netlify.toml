@@ -1,0 +1,24 @@
+[build]
+  command = "npm run build"
+  publish = "."
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/api/sync"
+  to = "/.netlify/functions/sync-hotline"
+  status = 200
+
+[[redirects]]
+  from = "/api/issues"
+  to = "/.netlify/functions/list-issues"
+  status = 200
+
+[[redirects]]
+  from = "/api/issues/update"
+  to = "/.netlify/functions/update-issue"
+  status = 200
+
+[[redirects]]
+  from = "/api/issues/reclassify"
+  to = "/.netlify/functions/reclassify-issues"
+  status = 200

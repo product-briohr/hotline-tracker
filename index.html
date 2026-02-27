@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Product Hotline Tracker</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <h1>Product Hotline Tracker</h1>
+          <p>Auto-synced from Gemini notes in Google Drive</p>
+        </div>
+        <div class="topbar-actions">
+          <input
+            id="syncToken"
+            type="password"
+            placeholder="Sync token (optional)"
+            autocomplete="off"
+          />
+          <button id="syncBtn" class="btn btn-primary">Sync Now</button>
+        </div>
+      </header>
+
+      <section class="filters">
+        <input id="search" placeholder="Search description/comments..." />
+        <input id="dateFrom" type="date" />
+        <input id="dateTo" type="date" />
+        <select id="moduleFilter"></select>
+        <select id="typeFilter"></select>
+        <select id="csFilter"></select>
+        <select id="pmFilter"></select>
+        <button id="clearBtn" class="btn">Clear</button>
+      </section>
+
+      <section class="meta-row">
+        <span id="stats">Loading...</span>
+        <span id="toast" class="toast"></span>
+      </section>
+
+      <section class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Module</th>
+              <th>Issue Type</th>
+              <th>CS</th>
+              <th>PM Owner</th>
+              <th>Issue / Question Description</th>
+              <th>Comments</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </section>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
