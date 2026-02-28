@@ -5,5 +5,5 @@ export const config = {
 };
 
 export default async () => {
-  return runSyncOnce();
+  return runSyncOnce({ notifySlack: true, trigger: "scheduled" });
 };

@@ -41,6 +41,8 @@ Optional:
 - `MEETING_KEYWORD` (default: Product Hotline)
 - `BLOB_STORE_NAME`
 - `GEMINI_MODEL`
+- `SLACK_SYNC_WEBHOOK_URL` (optional; send scheduled sync pass/fail to Slack)
+- `SLACK_SYNC_APP_NAME` (optional; default: `Product Hotline Tracker`)
 
 ## 4) Google Drive access setup
 
@@ -69,6 +71,7 @@ netlify deploy --prod
 ## 7) How sync works
 
 - Scheduled function runs weekdays at `05:00 UTC` (1:00 PM MYT).
+- Scheduled sync can post pass/fail status to Slack when `SLACK_SYNC_WEBHOOK_URL` is set.
 - It scans Drive folder (+ subfolders), picks latest matching doc, and skips already processed files.
 - Manual sync available via UI button (`Sync Now`).
 - If `SYNC_TOKEN` is set, paste it in UI to run manual sync.

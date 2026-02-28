@@ -1086,11 +1086,64 @@ async function resolveAccessToken(authClient) {
   return token;
 }
 
+async function sendSlackSyncStatus(payload) {
+  const webhookUrl = String(process.env.SLACK_SYNC_WEBHOOK_URL || "").trim();
+  if (!webhookUrl) return;
+
+  const appName = String(process.env.SLACK_SYNC_APP_NAME || "Product Hotline Tracker").trim();
+  const trigger = String(payload?.trigger || "scheduled").trim();
+  const status = String(payload?.status || "unknown").trim();
+  const statusEmoji = payload?.ok ? ":white_check_mark:" : ":x:";
+  const inserted = Number(payload?.inserted || 0);
+  const sourceFile = String(payload?.sourceFile || "").trim();
+  const message = String(payload?.message || "").trim();
+  const error = String(payload?.error || "").trim();
+  const happenedAt = new Date().toISOString();
+
+  const lines = [
+    `${statusEmoji} *${appName}* auto-sync ${payload?.ok ? "passed" : "failed"}`,
+    `*Trigger:* ${trigger}`,
+    `*Status:* ${status}`,
+    `*Inserted:* ${inserted}`,
+    `*Time:* ${happenedAt}`
+  ];
+  if (sourceFile) lines.push(`*Source file:* ${sourceFile}`);
+  if (message) lines.push(`*Message:* ${message}`);
+  if (error) lines.push(`*Error:* ${error.slice(0, 500)}`);
+
+  await fetch(webhookUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: JSON.stringify({ text: lines.join("\n") })
+  });
+}
+
+async function makeSyncResponse(statusCode, body, options = {}) {
+  if (options?.notifySlack) {
+    try {
+      await sendSlackSyncStatus({
+        ok: body?.ok === true,
+        status: body?.ok === true ? "success" : "failed",
+        inserted: body?.inserted || 0,
+        sourceFile: body?.sourceFile || "",
+        message: body?.message || "",
+        error: body?.error || "",
+        trigger: options?.trigger || "scheduled"
+      });
+    } catch {
+      // Never fail sync because Slack webhook notification failed.
+    }
+  }
+  return json(statusCode, body);
+}
+
 export async function runSyncOnce(options = {}) {
+  const notifySlack = options?.notifySlack === true;
+  const trigger = String(options?.trigger || "manual").trim();
   try {
     const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
     if (!folderId) {
-      return json(500, { ok: false, error: "Missing GOOGLE_DRIVE_FOLDER_ID" });
+      return makeSyncResponse(500, { ok: false, error: "Missing GOOGLE_DRIVE_FOLDER_ID" }, { notifySlack, trigger });
     }
 
     const drive = getDriveClient();
@@ -1099,25 +1152,25 @@ export async function runSyncOnce(options = {}) {
     const candidates = files.filter((f) => matchesKeywords(f.name));
     if (!candidates.length) {
       await markAutoSyncSuccess(store);
-      return json(200, { ok: true, inserted: 0, message: "No matching notes file found." });
+      return makeSyncResponse(200, { ok: true, inserted: 0, message: "No matching notes file found." }, { notifySlack, trigger });
     }
 
     const latest = candidates[0];
     const fileKey = latest.id;
     if (await isProcessed(store, fileKey)) {
       await markAutoSyncSuccess(store);
-      return json(200, { ok: true, inserted: 0, message: "Latest file already processed." });
+      return makeSyncResponse(200, { ok: true, inserted: 0, message: "Latest file already processed." }, { notifySlack, trigger });
     }
 
     const text = await exportDocText(drive, latest.id);
     if (!text || text.trim().length < 80) {
       await markProcessed(store, fileKey);
       await markAutoSyncSuccess(store);
-      return json(200, {
+      return makeSyncResponse(200, {
         ok: true,
         inserted: 0,
         message: "Skipped file because notes were too short."
-      });
+      }, { notifySlack, trigger });
     }
 
     const dateIso = parseMeetingDateFromNotes(text) || toIsoDate(latest.modifiedTime);
@@ -1138,12 +1191,12 @@ export async function runSyncOnce(options = {}) {
     await markProcessed(store, fileKey);
     await markAutoSyncSuccess(store);
 
-    return json(200, {
+    return makeSyncResponse(200, {
       ok: true,
       inserted: stamped.length,
       sourceFile: latest.name
-    });
+    }, { notifySlack, trigger });
   } catch (error) {
-    return json(500, { ok: false, error: String(error?.message || error) });
+    return makeSyncResponse(500, { ok: false, error: String(error?.message || error) }, { notifySlack, trigger });
   }
 }
