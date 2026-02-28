@@ -115,10 +115,13 @@ async function init() {
   }
   applySavedTheme();
   setNewIssueOptions();
-  renderTableFilterMultiSelects();
+  requestAnimationFrame(() => {
+    renderTableFilterMultiSelects();
+  });
   resetNewIssueForm();
-  if (!isLocalDevHost()) {
-    els.syncBtn.classList.add("hidden");
+  if (isLocalDevHost() && els.syncBtn) {
+    els.syncBtn.classList.remove("hidden");
+    els.syncBtn.removeAttribute("aria-hidden");
   }
 
   els.search.addEventListener("input", debounce(() => goToPage(1), 220));
@@ -1105,14 +1108,14 @@ function getSelectedValues(selectEl) {
 }
 
 function renderTableFilterMultiSelects() {
-  els.moduleFilterMs.innerHTML = renderFilterPillMultiSelect("module", MODULES, state.filterValues.module);
-  els.issueTypeFilterMs.innerHTML = renderFilterPillMultiSelect(
-    "issueType",
-    ISSUE_TYPES,
-    state.filterValues.issueType
-  );
-  els.csFilterMs.innerHTML = renderFilterPillMultiSelect("cs", CS_LIST, state.filterValues.cs);
-  els.pmOwnerFilterMs.innerHTML = renderFilterPillMultiSelect("pmOwner", PM_OWNERS, state.filterValues.pmOwner);
+  const m = document.querySelector("#moduleFilterMs");
+  const t = document.querySelector("#issueTypeFilterMs");
+  const c = document.querySelector("#csFilterMs");
+  const p = document.querySelector("#pmOwnerFilterMs");
+  if (m) m.innerHTML = renderFilterPillMultiSelect("module", MODULES, state.filterValues.module);
+  if (t) t.innerHTML = renderFilterPillMultiSelect("issueType", ISSUE_TYPES, state.filterValues.issueType);
+  if (c) c.innerHTML = renderFilterPillMultiSelect("cs", CS_LIST, state.filterValues.cs);
+  if (p) p.innerHTML = renderFilterPillMultiSelect("pmOwner", PM_OWNERS, state.filterValues.pmOwner);
 }
 
 function renderFilterPillMultiSelect(field, values, selectedValues) {
