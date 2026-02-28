@@ -1,9 +1,13 @@
 import {
+  assertPasswordGate,
   json,
   runSyncOnce
 } from "./_lib.mjs";
 
 export default async (request) => {
+  const gateError = assertPasswordGate(request);
+  if (gateError) return gateError;
+
   const authError = assertSyncAuth(request);
   if (authError) return authError;
   const url = new URL(request.url);

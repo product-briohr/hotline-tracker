@@ -1,8 +1,11 @@
-import { getDataStore, json, loadIssues, sanitizeEditableRow, saveIssues } from "./_lib.mjs";
+import { assertPasswordGate, getDataStore, json, loadIssues, sanitizeEditableRow, saveIssues } from "./_lib.mjs";
 import { randomUUID } from "node:crypto";
 
 export default async (request) => {
   try {
+    const gateError = assertPasswordGate(request);
+    if (gateError) return gateError;
+
     if (request.method !== "POST") {
       return json(405, { ok: false, error: "Method not allowed" });
     }

@@ -1,35 +1,25 @@
 (function authGateInit() {
-  const PASSWORD = "briohr1234";
-  const STORAGE_KEY = "hotline_auth_v1";
-  const SESSION_MS = 1000 * 60 * 60 * 12;
   const waiters = [];
+  let gateVisible = false;
 
   window.waitForHotlineAuth = function waitForHotlineAuth() {
-    if (isAuthorized()) return Promise.resolve();
+    if (!gateVisible) {
+      return ensureAuthorized().then(() => undefined);
+    }
     return new Promise((resolve) => waiters.push(resolve));
   };
 
-  if (isAuthorized()) return;
-  lockPage();
+  void ensureAuthorized();
 
-  function isAuthorized() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return false;
-      const parsed = JSON.parse(raw);
-      if (!parsed || parsed.ok !== true) return false;
-      if (!Number.isFinite(parsed.exp) || Date.now() > parsed.exp) {
-        localStorage.removeItem(STORAGE_KEY);
-        return false;
-      }
-      return true;
-    } catch {
-      localStorage.removeItem(STORAGE_KEY);
-      return false;
-    }
+  async function ensureAuthorized() {
+    const session = await readSession();
+    if (!session.enabled || session.authenticated) return;
+    lockPage();
   }
 
   function lockPage() {
+    if (gateVisible) return;
+    gateVisible = true;
     document.documentElement.classList.add("auth-locked");
     const gate = document.createElement("div");
     gate.className = "auth-gate";
@@ -52,21 +42,21 @@
     }
 
     setTimeout(() => input.focus(), 0);
-    form.addEventListener("submit", (event) => {
+    form.addEventListener("submit", async (event) => {
       event.preventDefault();
       const value = String(input.value || "");
-      if (value !== PASSWORD) {
+      if (!value) {
+        error.textContent = "Password is required";
+        input.focus();
+        return;
+      }
+      const ok = await submitPassword(value);
+      if (!ok) {
         error.textContent = "Wrong password";
         input.select();
         return;
       }
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          ok: true,
-          exp: Date.now() + SESSION_MS
-        })
-      );
+      gateVisible = false;
       document.documentElement.classList.remove("auth-locked");
       gate.remove();
       while (waiters.length) {
@@ -74,5 +64,42 @@
         if (resolve) resolve();
       }
     });
+  }
+
+  async function submitPassword(password) {
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password })
+      });
+      const data = await safeJson(res);
+      return Boolean(res.ok && data?.ok);
+    } catch {
+      return false;
+    }
+  }
+
+  async function readSession() {
+    try {
+      const res = await fetch("/api/auth/session", { cache: "no-store" });
+      const data = await safeJson(res);
+      if (!res.ok || !data?.ok) return { enabled: true, authenticated: false };
+      return {
+        enabled: Boolean(data.enabled),
+        authenticated: Boolean(data.authenticated)
+      };
+    } catch {
+      return { enabled: true, authenticated: false };
+    }
+  }
+
+  async function safeJson(res) {
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      return null;
+    }
   }
 })();

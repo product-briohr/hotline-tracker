@@ -1,4 +1,5 @@
 import {
+  assertPasswordGate,
   explodeRowsByDescriptionBullets,
   getDataStore,
   getLastAutoSyncAt,
@@ -8,6 +9,9 @@ import {
 
 export default async (request) => {
   try {
+    const gateError = assertPasswordGate(request);
+    if (gateError) return gateError;
+
     const url = new URL(request.url);
     const q = (url.searchParams.get("q") || "").toLowerCase().trim();
     const moduleFilter = readMultiFilter(url, "module");

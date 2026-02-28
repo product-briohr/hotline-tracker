@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getStore } from "@netlify/blobs";
 import { JWT } from "google-auth-library";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 
 const MODULES = [
   "Claims",
@@ -134,6 +134,96 @@ export function json(statusCode, body) {
       "cache-control": "no-store"
     }
   });
+}
+
+const AUTH_COOKIE_NAME = "hotline_auth";
+const AUTH_SESSION_MS = 1000 * 60 * 60 * 12;
+
+export function assertPasswordGate(request) {
+  const appPassword = String(process.env.APP_PASSWORD || "").trim();
+  if (!appPassword) return null;
+  const token = readCookie(request, AUTH_COOKIE_NAME);
+  if (!verifyAuthToken(token)) {
+    return json(401, { ok: false, error: "Unauthorized" });
+  }
+  return null;
+}
+
+export function createPasswordGateSessionCookie() {
+  const token = signAuthToken({
+    exp: Date.now() + AUTH_SESSION_MS
+  });
+  const maxAgeSec = Math.floor(AUTH_SESSION_MS / 1000);
+  return `${AUTH_COOKIE_NAME}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAgeSec}`;
+}
+
+export function clearPasswordGateSessionCookie() {
+  return `${AUTH_COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
+}
+
+export function isPasswordGateEnabled() {
+  return String(process.env.APP_PASSWORD || "").trim().length > 0;
+}
+
+function signAuthToken(payload) {
+  const encoded = toBase64Url(JSON.stringify(payload));
+  const signature = signValue(encoded);
+  return `${encoded}.${signature}`;
+}
+
+function verifyAuthToken(token) {
+  const raw = String(token || "").trim();
+  if (!raw.includes(".")) return false;
+  const [encoded, signature] = raw.split(".");
+  if (!encoded || !signature) return false;
+  const expected = signValue(encoded);
+  if (!safeEqual(signature, expected)) return false;
+  try {
+    const payload = JSON.parse(fromBase64Url(encoded));
+    const exp = Number(payload?.exp || 0);
+    return Number.isFinite(exp) && Date.now() <= exp;
+  } catch {
+    return false;
+  }
+}
+
+function signValue(value) {
+  const secret = getSessionSecret();
+  return createHmac("sha256", secret).update(String(value || "")).digest("base64url");
+}
+
+function getSessionSecret() {
+  const explicit = String(process.env.APP_SESSION_SECRET || "").trim();
+  if (explicit) return explicit;
+  return `fallback:${String(process.env.APP_PASSWORD || "").trim()}`;
+}
+
+function safeEqual(a, b) {
+  const aBuf = Buffer.from(String(a || ""));
+  const bBuf = Buffer.from(String(b || ""));
+  if (aBuf.length !== bBuf.length) return false;
+  return timingSafeEqual(aBuf, bBuf);
+}
+
+function readCookie(request, name) {
+  const cookieHeader = String(request.headers.get("cookie") || "");
+  if (!cookieHeader) return "";
+  const target = `${name}=`;
+  for (const part of cookieHeader.split(";")) {
+    const trimmed = part.trim();
+    if (trimmed.startsWith(target)) {
+      return decodeURIComponent(trimmed.slice(target.length));
+    }
+  }
+  return "";
+}
+
+function toBase64Url(value) {
+  return Buffer.from(String(value || ""), "utf8").toString("base64url");
+}
+
+function fromBase64Url(value) {
+  return Buffer.from(String(value || ""), "base64url").toString("utf8");
 }
 
 export function getDataStore() {
