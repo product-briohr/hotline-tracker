@@ -14,7 +14,7 @@ export default async (request) => {
     if (!id) return json(400, { ok: false, error: "Missing id" });
 
     const store = getDataStore();
-    const issues = await loadIssues(store);
+    const issues = await loadIssuesWithRetry(store, id);
     const remaining = issues.filter((row) => row.id !== id);
     if (remaining.length === issues.length) {
       return json(404, { ok: false, error: "Issue not found" });
@@ -26,6 +26,20 @@ export default async (request) => {
     return json(500, { ok: false, error: String(error?.message || error) });
   }
 };
+
+async function loadIssuesWithRetry(store, id, attempts = 5, delayMs = 160) {
+  let latest = [];
+  for (let i = 0; i < attempts; i += 1) {
+    latest = await loadIssues(store);
+    if (latest.some((row) => row.id === id)) return latest;
+    if (i < attempts - 1) await sleep(delayMs);
+  }
+  return latest;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function assertEditAuth(request) {
   const requiredToken = process.env.EDIT_TOKEN;
