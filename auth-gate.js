@@ -26,8 +26,27 @@
     gate.innerHTML = `<div class="auth-card">
       <h2>Enter Password</h2>
       <p>This tracker is protected.</p>
-      <form class="auth-form" autocomplete="off">
-        <input id="authPasswordInput" type="text" placeholder="Password" required />
+      <form class="auth-form" autocomplete="on">
+        <input
+          class="auth-hidden-username"
+          type="text"
+          name="username"
+          autocomplete="username"
+          value="hotline-user"
+          tabindex="-1"
+          aria-hidden="true"
+        />
+        <div class="auth-password-row">
+          <input
+            id="authPasswordInput"
+            type="password"
+            name="password"
+            autocomplete="current-password"
+            placeholder="Password"
+            required
+          />
+          <button id="authToggleVisible" type="button" class="btn">Show</button>
+        </div>
         <button type="submit" class="btn btn-primary">Unlock</button>
       </form>
       <div class="auth-error" id="authError"></div>
@@ -37,9 +56,24 @@
     const form = gate.querySelector(".auth-form");
     const input = gate.querySelector("#authPasswordInput");
     const error = gate.querySelector("#authError");
+    const toggleBtn = gate.querySelector("#authToggleVisible");
     if (!(form instanceof HTMLFormElement) || !(input instanceof HTMLInputElement) || !(error instanceof HTMLElement)) {
       return;
     }
+
+    if (toggleBtn instanceof HTMLButtonElement) {
+      toggleBtn.addEventListener("click", () => {
+        const reveal = input.type === "password";
+        input.type = reveal ? "text" : "password";
+        toggleBtn.textContent = reveal ? "Hide" : "Show";
+      });
+    }
+
+    input.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      form.requestSubmit();
+    });
 
     setTimeout(() => input.focus(), 0);
     form.addEventListener("submit", async (event) => {
