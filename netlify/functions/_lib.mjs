@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getStore } from "@netlify/blobs";
 import { JWT } from "google-auth-library";
+import { randomUUID } from "node:crypto";
 
 const MODULES = [
   "Claims",
@@ -1042,7 +1043,7 @@ export async function runSyncOnce(options = {}) {
     const rows = await extractRowsFromNotes(text, dateIso);
     const issues = await loadIssues(store);
     const stamped = rows.map((row) => ({
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       sourceFileId: latest.id,
       sourceFileName: latest.name,
       sourceFileLink: latest.webViewLink || "",

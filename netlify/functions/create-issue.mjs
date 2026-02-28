@@ -1,4 +1,5 @@
 import { getDataStore, json, loadIssues, sanitizeEditableRow, saveIssues } from "./_lib.mjs";
+import { randomUUID } from "node:crypto";
 
 export default async (request) => {
   try {
@@ -19,7 +20,7 @@ export default async (request) => {
     const issues = await loadIssues(store);
     const nowIso = new Date().toISOString();
     const created = {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       sourceFileId: "manual",
       sourceFileName: "Manual Entry",
       sourceFileLink: "",
