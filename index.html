@@ -15,7 +15,12 @@
         </div>
         <div class="topbar-actions">
           <input id="search" placeholder="Search description/comments..." />
-          <button id="themeToggle" class="btn" type="button" aria-label="Toggle theme">Dark mode</button>
+          <button id="newIssueBtn" class="btn" type="button">New Issue</button>
+          <button id="themeToggle" class="theme-switch" type="button" aria-label="Toggle theme" aria-pressed="false">
+            <span class="theme-icon sun">☀</span>
+            <span class="theme-icon moon">☾</span>
+            <span class="theme-knob" aria-hidden="true"></span>
+          </button>
           <button id="syncBtn" class="btn btn-primary">Sync Now</button>
         </div>
       </header>
@@ -36,6 +41,7 @@
               <th>PM Owner</th>
               <th>Issue / Question Description</th>
               <th>Comments</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody id="rows"></tbody>
@@ -46,6 +52,42 @@
         <div id="pageNumbers" class="page-numbers"></div>
       </section>
     </main>
+
+    <div id="newIssueModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="newIssueTitle">
+      <div class="modal-card">
+        <div class="modal-head">
+          <h2 id="newIssueTitle">New Issue</h2>
+          <button id="newIssueClose" class="icon-only" type="button" aria-label="Close">✕</button>
+        </div>
+        <form id="newIssueForm" class="modal-form">
+          <label>Date<input id="newDate" type="date" required /></label>
+          <label>Module<div id="newModuleMs"></div></label>
+          <label>Issue Type<select id="newIssueType" required></select></label>
+          <label>CS<div id="newCsMs"></div></label>
+          <label>PM Owner<div id="newPmOwnerMs"></div></label>
+          <label class="full">Issue/Question Description<textarea id="newDescription" rows="5" required></textarea></label>
+          <label class="full">Comments<textarea id="newComments" rows="4"></textarea></label>
+          <div class="modal-actions">
+            <button type="button" id="newIssueCancel" class="btn">Cancel</button>
+            <button type="submit" id="newIssueSave" class="btn btn-primary">Save Issue</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="deleteConfirmModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="deleteConfirmTitle">
+      <div class="modal-card confirm-card">
+        <div class="modal-head">
+          <h2 id="deleteConfirmTitle">Delete Record</h2>
+          <button id="deleteConfirmClose" class="icon-only" type="button" aria-label="Close">✕</button>
+        </div>
+        <p class="confirm-text">Are you sure you want to delete this record? This action cannot be undone.</p>
+        <div class="modal-actions">
+          <button type="button" id="deleteConfirmCancel" class="btn">Cancel</button>
+          <button type="button" id="deleteConfirmSubmit" class="btn btn-danger">Delete</button>
+        </div>
+      </div>
+    </div>
 
     <script type="module" src="/app.js"></script>
   </body>

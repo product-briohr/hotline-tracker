@@ -19,6 +19,16 @@
   status = 200
 
 [[redirects]]
+  from = "/api/issues/create"
+  to = "/.netlify/functions/create-issue"
+  status = 200
+
+[[redirects]]
+  from = "/api/issues/delete"
+  to = "/.netlify/functions/delete-issue"
+  status = 200
+
+[[redirects]]
   from = "/api/issues/reclassify"
   to = "/.netlify/functions/reclassify-issues"
   status = 200

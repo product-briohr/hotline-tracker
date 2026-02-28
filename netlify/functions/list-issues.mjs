@@ -1,32 +1,5 @@
 import { explodeRowsByDescriptionBullets, getDataStore, json, loadIssues } from "./_lib.mjs";
 
-const CS_NAMES = [
-  "Adila",
-  "Arveena",
-  "Awana",
-  "Brandon",
-  "Diyana",
-  "Edison",
-  "Edrin",
-  "Elizabeth",
-  "Haslina",
-  "Ivan",
-  "Kai Chi",
-  "Lina",
-  "Nadirah",
-  "Nadzra",
-  "Rubini",
-  "Syakirah",
-  "Yana",
-  "Pavanjeet",
-  "Aqilah"
-];
-
-const CS_NAME_ALIASES = [
-  [/\bnoor\s+diyana\s+binti\s+kaseharom\b/gi, "Diyana"],
-  [/\bnur\s+diyana\s+binti\s+sajali\b/gi, "Yana"]
-];
-
 export default async (request) => {
   try {
     const url = new URL(request.url);
@@ -46,7 +19,6 @@ export default async (request) => {
     const expanded = explodeRowsByDescriptionBullets(all);
 
     const filtered = expanded.filter((r) => {
-      if (!mentionsAnyCsName(r.description)) return false;
       if (moduleFilter.length && !hasAnySelectedValue(r.module, moduleFilter)) return false;
       if (typeFilter.length && !hasAnySelectedValue(r.issueType, typeFilter)) return false;
       if (csFilter.length && !hasAnySelectedValue(r.cs, csFilter)) return false;
@@ -97,28 +69,6 @@ function compareRowsByLatestDate(a, b) {
   const dateCmp = String(b?.date || "").localeCompare(String(a?.date || ""));
   if (dateCmp !== 0) return dateCmp;
   return String(b?.createdAt || "").localeCompare(String(a?.createdAt || ""));
-}
-
-function mentionsAnyCsName(input) {
-  const text = normalizeCsAliases(String(input || ""));
-  return CS_NAMES.some((name) => makeNameRegex(name).test(text));
-}
-
-function normalizeCsAliases(input) {
-  let text = String(input || "");
-  for (const [pattern, canonical] of CS_NAME_ALIASES) {
-    text = text.replace(pattern, canonical);
-  }
-  return text;
-}
-
-function makeNameRegex(name) {
-  const escaped = escapeRegExp(String(name || "").trim()).replace(/\\\s+/g, "\\s+");
-  return new RegExp(`\\b${escaped}\\b`, "i");
-}
-
-function escapeRegExp(input) {
-  return String(input || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function hasAnySelectedValue(cellValue, selected) {

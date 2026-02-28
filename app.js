@@ -52,11 +52,29 @@ const THEME_KEY = "hotline-theme";
 
 const els = {
   search: document.querySelector("#search"),
+  newIssueBtn: document.querySelector("#newIssueBtn"),
   syncBtn: document.querySelector("#syncBtn"),
   themeToggle: document.querySelector("#themeToggle"),
   pageNumbers: document.querySelector("#pageNumbers"),
   toast: document.querySelector("#toast"),
-  rows: document.querySelector("#rows")
+  rows: document.querySelector("#rows"),
+  newIssueModal: document.querySelector("#newIssueModal"),
+  newIssueClose: document.querySelector("#newIssueClose"),
+  newIssueCancel: document.querySelector("#newIssueCancel"),
+  newIssueForm: document.querySelector("#newIssueForm"),
+  newDate: document.querySelector("#newDate"),
+  newModuleMs: document.querySelector("#newModuleMs"),
+  newIssueType: document.querySelector("#newIssueType"),
+  newCsMs: document.querySelector("#newCsMs"),
+  newPmOwnerMs: document.querySelector("#newPmOwnerMs"),
+  newDescription: document.querySelector("#newDescription"),
+  newComments: document.querySelector("#newComments"),
+  newIssueSave: document.querySelector("#newIssueSave")
+  ,
+  deleteConfirmModal: document.querySelector("#deleteConfirmModal"),
+  deleteConfirmClose: document.querySelector("#deleteConfirmClose"),
+  deleteConfirmCancel: document.querySelector("#deleteConfirmCancel"),
+  deleteConfirmSubmit: document.querySelector("#deleteConfirmSubmit")
 };
 
 const state = {
@@ -69,22 +87,35 @@ const state = {
   draftDescription: "",
   draftComment: "",
   currentRows: [],
-  rowsById: new Map()
+  rowsById: new Map(),
+  deletingId: ""
 };
 
 init();
 
 function init() {
   applySavedTheme();
+  setNewIssueOptions();
+  resetNewIssueForm();
 
   els.search.addEventListener("input", debounce(() => goToPage(1), 220));
+  els.newIssueBtn.addEventListener("click", openNewIssueModal);
   els.syncBtn.addEventListener("click", runSync);
   els.themeToggle.addEventListener("click", toggleTheme);
   els.rows.addEventListener("click", onTableClick);
   els.rows.addEventListener("input", onTableInput);
   els.rows.addEventListener("change", onTableChange);
+  els.newIssueModal.addEventListener("click", onModalClick);
+  els.newIssueModal.addEventListener("input", onModalInput);
   els.pageNumbers.addEventListener("click", onPageNumbersClick);
+  els.newIssueClose.addEventListener("click", closeNewIssueModal);
+  els.newIssueCancel.addEventListener("click", closeNewIssueModal);
+  els.newIssueForm.addEventListener("submit", onNewIssueSubmit);
+  els.deleteConfirmClose.addEventListener("click", closeDeleteConfirmModal);
+  els.deleteConfirmCancel.addEventListener("click", closeDeleteConfirmModal);
+  els.deleteConfirmSubmit.addEventListener("click", onDeleteConfirmSubmit);
   document.addEventListener("click", onDocumentClick);
+  document.addEventListener("keydown", onDocumentKeyDown);
 
   loadRows();
   setInterval(() => {
@@ -157,7 +188,7 @@ function renderRow(row, idx) {
         </div>
       </div>`
     : `<div class="cell-with-icon">
-        <span class="desc-cell">${renderRichText(row.description || "")}</span>
+        <span class="desc-cell">${renderDescriptionText(row.description || "")}</span>
         <button class="icon-only" data-action="edit-description" data-id="${escapeHtml(row.id)}" title="Edit description">✏️</button>
       </div>`;
 
@@ -169,10 +200,18 @@ function renderRow(row, idx) {
           <button class="mini-btn" data-action="cancel-comments">Cancel</button>
         </div>
       </div>`
-    : `<div class="cell-with-icon">
-        <span class="comment-cell">${renderRichText(row.comments || "")}</span>
-        <button class="icon-only" data-action="edit-comments" data-id="${escapeHtml(row.id)}" title="Add/Edit comment">＋</button>
-      </div>`;
+    : String(row.comments || "").trim()
+      ? `<div class="cell-with-icon comment-cell-wrap">
+          <span class="comment-cell">${renderRichText(row.comments || "")}</span>
+          <button class="icon-only comment-add-btn" data-action="edit-comments" data-id="${escapeHtml(
+            row.id
+          )}" title="Add/Edit comment">＋</button>
+        </div>`
+      : `<div class="comment-empty-wrap">
+          <button class="icon-only comment-add-btn" data-action="edit-comments" data-id="${escapeHtml(
+            row.id
+          )}" title="Add/Edit comment">＋</button>
+        </div>`;
 
   return `<tr data-id="${escapeHtml(row.id)}">
     <td>${rowNumber}</td>
@@ -183,6 +222,9 @@ function renderRow(row, idx) {
     <td>${renderPillMultiSelect("pmOwner", PM_OWNERS, row.pmOwner, row.id)}</td>
     <td>${descriptionCell}</td>
     <td>${commentsCell}</td>
+    <td><div class="action-cell"><button class="icon-only danger" data-action="delete-row" data-id="${escapeHtml(
+      row.id
+    )}" title="Delete row">🗑</button></div></td>
   </tr>`;
 }
 
@@ -212,7 +254,7 @@ function renderPillMultiSelect(field, values, current, id, isMulti = true) {
       return `<div class="ms-option ${isSelected ? "selected" : ""}" data-action="toggle-ms-option" data-value="${escapeHtml(
         value
       )}">
-        ${renderChip(value)}
+        ${renderValueChip(field, value)}
         <span class="ms-check">${isSelected ? "✓" : ""}</span>
       </div>`;
     })
@@ -224,7 +266,7 @@ function renderPillMultiSelect(field, values, current, id, isMulti = true) {
     encodeMultiValue(selected)
   )}">
     <button class="ms-trigger" data-action="toggle-ms" type="button">
-      <span class="ms-chips">${chips}</span>
+      <span class="ms-chips">${selectedValues.map((value) => renderValueChip(field, value)).join("") || chips}</span>
       <span class="ms-caret">▾</span>
     </button>
     <div class="ms-menu">
@@ -237,6 +279,21 @@ function renderPillMultiSelect(field, values, current, id, isMulti = true) {
 function renderChip(value) {
   const tone = chipToneClass(value);
   return `<span class="chip ${tone}">${escapeHtml(value)}</span>`;
+}
+
+function renderValueChip(field, value) {
+  if (field === "issueType") {
+    return `<span class="chip ${issueTypeChipClass(value)}">${escapeHtml(value)}</span>`;
+  }
+  return renderChip(value);
+}
+
+function issueTypeChipClass(value) {
+  const normalized = String(value || "").toLowerCase().trim();
+  if (normalized === "bug (cs ticket)") return "chip-issue-bug";
+  if (normalized === "feature request") return "chip-issue-feature";
+  if (normalized === "question/troubleshooting") return "chip-issue-question";
+  return "chip-tone-2";
 }
 
 function chipToneClass(value) {
@@ -256,14 +313,7 @@ function onTableInput(event) {
   }
 
   if (target instanceof HTMLInputElement && target.classList.contains("ms-search")) {
-    const menu = target.closest(".ms-menu");
-    if (!menu) return;
-    const q = target.value.trim().toLowerCase();
-    const options = menu.querySelectorAll(".ms-option");
-    for (const opt of options) {
-      const label = opt.textContent.toLowerCase();
-      opt.style.display = !q || label.includes(q) ? "" : "none";
-    }
+    handleMultiSelectSearchInput(target);
   }
 }
 
@@ -352,13 +402,83 @@ async function onTableClick(event) {
     state.editingCommentId = "";
     state.draftComment = "";
     await saveRowPatch(id, { description: row.description || "", comments: nextComments });
+    return;
+  }
+
+  if (action === "delete-row" && row) {
+    state.deletingId = id;
+    els.deleteConfirmModal.classList.remove("hidden");
   }
 }
 
 function onDocumentClick(event) {
+  if (event.target === els.newIssueModal) {
+    closeNewIssueModal();
+    return;
+  }
+  if (event.target === els.deleteConfirmModal) {
+    closeDeleteConfirmModal();
+    return;
+  }
   if (event.target.closest(".ms")) return;
   for (const open of document.querySelectorAll(".ms.open")) {
     open.classList.remove("open");
+  }
+}
+
+function onDocumentKeyDown(event) {
+  if (event.key === "Escape" && !els.newIssueModal.classList.contains("hidden")) {
+    closeNewIssueModal();
+  } else if (event.key === "Escape" && !els.deleteConfirmModal.classList.contains("hidden")) {
+    closeDeleteConfirmModal();
+  }
+}
+
+function onModalInput(event) {
+  const target = event.target;
+  if (target instanceof HTMLInputElement && target.classList.contains("ms-search")) {
+    handleMultiSelectSearchInput(target);
+  }
+}
+
+function onModalClick(event) {
+  const btn = event.target.closest("[data-action]");
+  if (!btn) return;
+
+  const action = btn.dataset.action;
+  if (action === "toggle-ms") {
+    event.stopPropagation();
+    const cell = btn.closest(".ms");
+    if (!cell) return;
+    for (const other of document.querySelectorAll(".ms.open")) {
+      if (other !== cell) other.classList.remove("open");
+    }
+    cell.classList.toggle("open");
+    return;
+  }
+
+  if (action === "toggle-ms-option") {
+    event.stopPropagation();
+    const option = btn.closest(".ms-option");
+    const cell = btn.closest(".ms");
+    if (!option || !cell) return;
+    const field = cell.dataset.editField || "";
+    const isMulti = cell.dataset.multi !== "0";
+    const value = option.dataset.value || "";
+    if (!field || !value) return;
+
+    const selected = new Set(parseMultiValue(cell.dataset.values || ""));
+    if (isMulti) {
+      if (selected.has(value)) selected.delete(value);
+      else selected.add(value);
+    } else {
+      selected.clear();
+      selected.add(value);
+    }
+    const merged = encodeMultiValue(Array.from(selected));
+    cell.dataset.values = merged;
+    refreshModalMultiSelectVisual(cell, field, parseMultiValue(merged));
+    if (!isMulti) cell.classList.remove("open");
   }
 }
 
@@ -496,6 +616,122 @@ async function runSync() {
   }
 }
 
+function setNewIssueOptions() {
+  els.newIssueType.innerHTML = ISSUE_TYPES.map(
+    (x) => `<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`
+  ).join("");
+  renderNewIssueMultiSelects({ module: [], cs: [], pmOwner: [] });
+}
+
+function resetNewIssueForm() {
+  els.newDate.value = toIsoDateLocal(new Date());
+  els.newIssueType.value = ISSUE_TYPES[0] || "Question/Troubleshooting";
+  renderNewIssueMultiSelects({ module: [], cs: [], pmOwner: [] });
+  els.newDescription.value = "";
+  els.newComments.value = "";
+}
+
+function openNewIssueModal() {
+  resetNewIssueForm();
+  els.newIssueModal.classList.remove("hidden");
+  els.newDescription.focus();
+}
+
+function closeNewIssueModal() {
+  els.newIssueModal.classList.add("hidden");
+}
+
+function closeDeleteConfirmModal() {
+  state.deletingId = "";
+  els.deleteConfirmModal.classList.add("hidden");
+}
+
+async function onNewIssueSubmit(event) {
+  event.preventDefault();
+  const payload = {
+    date: els.newDate.value,
+    module: getModalMultiSelectValue(els.newModuleMs),
+    issueType: els.newIssueType.value,
+    cs: getModalMultiSelectValue(els.newCsMs),
+    pmOwner: getModalMultiSelectValue(els.newPmOwnerMs),
+    description: els.newDescription.value.trim(),
+    comments: els.newComments.value.trim()
+  };
+  if (!payload.module) {
+    els.toast.style.color = "var(--danger)";
+    els.toast.textContent = "Module is required";
+    return;
+  }
+  if (!payload.description) {
+    els.toast.style.color = "var(--danger)";
+    els.toast.textContent = "Description is required";
+    return;
+  }
+
+  const original = els.newIssueSave.textContent;
+  els.newIssueSave.disabled = true;
+  els.newIssueSave.textContent = "Saving...";
+  try {
+    const res = await fetch("/api/issues/create", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await safeJson(res);
+    if (!data.ok) {
+      els.toast.style.color = "var(--danger)";
+      els.toast.textContent = data.error || "Failed to create issue";
+      return;
+    }
+
+    closeNewIssueModal();
+    state.page = 1;
+    els.toast.style.color = "var(--success)";
+    els.toast.textContent = "Issue created";
+    await loadRows();
+  } catch (error) {
+    els.toast.style.color = "var(--danger)";
+    els.toast.textContent = String(error?.message || error);
+  } finally {
+    els.newIssueSave.disabled = false;
+    els.newIssueSave.textContent = original;
+  }
+}
+
+async function onDeleteConfirmSubmit() {
+  const id = state.deletingId;
+  if (!id) return;
+
+  const original = els.deleteConfirmSubmit.textContent;
+  els.deleteConfirmSubmit.disabled = true;
+  els.deleteConfirmSubmit.textContent = "Deleting...";
+  try {
+    const res = await fetch("/api/issues/delete", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id })
+    });
+    const data = await safeJson(res);
+    if (!data.ok) {
+      els.toast.style.color = "var(--danger)";
+      els.toast.textContent = data.error || "Failed to delete record";
+      return;
+    }
+
+    closeDeleteConfirmModal();
+    if (state.currentRows.length <= 1 && state.page > 1) state.page -= 1;
+    els.toast.style.color = "var(--success)";
+    els.toast.textContent = "Record deleted";
+    await loadRows();
+  } catch (error) {
+    els.toast.style.color = "var(--danger)";
+    els.toast.textContent = String(error?.message || error);
+  } finally {
+    els.deleteConfirmSubmit.disabled = false;
+    els.deleteConfirmSubmit.textContent = original;
+  }
+}
+
 function formatDisplayDate(dateStr) {
   const raw = String(dateStr || "").trim();
   if (!raw) return "";
@@ -517,7 +753,7 @@ function ordinal(day) {
 }
 
 function emptyState() {
-  return `<tr><td colspan="8" style="color:var(--muted);">No issues found for current filters.</td></tr>`;
+  return `<tr><td colspan="9" style="color:var(--muted);">No issues found for current filters.</td></tr>`;
 }
 
 function applySavedTheme() {
@@ -533,7 +769,11 @@ function toggleTheme() {
 function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
   localStorage.setItem(THEME_KEY, theme);
-  els.themeToggle.textContent = theme === "dark" ? "Light mode" : "Dark mode";
+  els.themeToggle.setAttribute("aria-pressed", theme === "dark" ? "true" : "false");
+  els.themeToggle.setAttribute(
+    "aria-label",
+    theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
+  );
 }
 
 function debounce(fn, ms) {
@@ -564,6 +804,16 @@ function renderRichText(input) {
   );
 }
 
+function renderDescriptionText(input) {
+  const raw = String(input || "");
+  const titleMatch = raw.match(/^([^:\n]{3,180}:)\s*/);
+  if (!titleMatch) return renderRichText(raw);
+
+  const title = titleMatch[1];
+  const rest = raw.slice(titleMatch[0].length);
+  return `<strong>${escapeHtml(title)}</strong> ${renderRichText(rest)}`;
+}
+
 function parseMultiValue(input) {
   return String(input || "")
     .split(/\s*\|\s*|,\s*/)
@@ -573,4 +823,82 @@ function parseMultiValue(input) {
 
 function encodeMultiValue(values) {
   return Array.from(new Set((values || []).map((v) => String(v || "").trim()).filter(Boolean))).join(" | ");
+}
+
+function handleMultiSelectSearchInput(target) {
+  const menu = target.closest(".ms-menu");
+  if (!menu) return;
+  const q = target.value.trim().toLowerCase();
+  const options = menu.querySelectorAll(".ms-option");
+  for (const opt of options) {
+    const label = opt.textContent.toLowerCase();
+    opt.style.display = !q || label.includes(q) ? "" : "none";
+  }
+}
+
+function renderNewIssueMultiSelects(valuesByField) {
+  els.newModuleMs.innerHTML = renderModalPillMultiSelect("module", MODULES, valuesByField.module || []);
+  els.newCsMs.innerHTML = renderModalPillMultiSelect("cs", CS_LIST, valuesByField.cs || []);
+  els.newPmOwnerMs.innerHTML = renderModalPillMultiSelect("pmOwner", PM_OWNERS, valuesByField.pmOwner || []);
+}
+
+function renderModalPillMultiSelect(field, values, selectedValues) {
+  const selectedSet = new Set(selectedValues);
+  const chipsHtml = selectedValues.length
+    ? selectedValues.map((value) => renderValueChip(field, value)).join("")
+    : `<span class="chip chip-empty">Select</span>`;
+  const options = values
+    .map((value) => {
+      const isSelected = selectedSet.has(value);
+      return `<div class="ms-option ${isSelected ? "selected" : ""}" data-action="toggle-ms-option" data-value="${escapeHtml(
+        value
+      )}">
+        ${renderValueChip(field, value)}
+        <span class="ms-check">${isSelected ? "✓" : ""}</span>
+      </div>`;
+    })
+    .join("");
+  return `<div class="ms" data-context="modal" data-edit-field="${field}" data-multi="1" data-values="${escapeHtml(
+    encodeMultiValue(selectedValues)
+  )}">
+    <button class="ms-trigger" data-action="toggle-ms" type="button">
+      <span class="ms-chips">${chipsHtml}</span>
+      <span class="ms-caret">▾</span>
+    </button>
+    <div class="ms-menu">
+      <input class="ms-search" type="text" placeholder="Search..." />
+      <div class="ms-options">${options}</div>
+    </div>
+  </div>`;
+}
+
+function refreshModalMultiSelectVisual(msCell, field, selectedValues) {
+  const chipsContainer = msCell.querySelector(".ms-chips");
+  if (chipsContainer) {
+    chipsContainer.innerHTML = selectedValues.length
+      ? selectedValues.map((value) => renderValueChip(field, value)).join("")
+      : `<span class="chip chip-empty">Select</span>`;
+  }
+  const selectedSet = new Set(selectedValues);
+  const options = msCell.querySelectorAll(".ms-option");
+  for (const option of options) {
+    const value = option.dataset.value || "";
+    const selected = selectedSet.has(value);
+    option.classList.toggle("selected", selected);
+    const check = option.querySelector(".ms-check");
+    if (check) check.textContent = selected ? "✓" : "";
+  }
+}
+
+function getModalMultiSelectValue(container) {
+  const ms = container.querySelector(".ms");
+  return ms?.dataset?.values || "";
+}
+
+function toIsoDateLocal(inputDate) {
+  const d = new Date(inputDate || new Date());
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }

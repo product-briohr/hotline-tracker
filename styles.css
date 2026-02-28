@@ -134,6 +134,51 @@ input::placeholder {
   background: var(--brand-2);
 }
 
+.theme-switch {
+  position: relative;
+  width: 76px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-muted);
+  cursor: pointer;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.theme-icon {
+  font-size: 16px;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.theme-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  transition: transform 0.18s ease;
+}
+
+.theme-switch[aria-pressed="true"] .theme-knob {
+  transform: translateX(36px);
+}
+
+:root[data-theme="dark"] .theme-icon.sun {
+  opacity: 0.6;
+}
+
+:root[data-theme="light"] .theme-icon.moon {
+  opacity: 0.6;
+}
+
 .meta-row {
   min-height: 26px;
   margin-bottom: 10px;
@@ -161,7 +206,7 @@ table {
 thead th {
   position: sticky;
   z-index: 3;
-  text-align: left;
+  text-align: center;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   font-size: 11px;
@@ -196,8 +241,6 @@ td:first-child {
 
 th:nth-child(3),
 td:nth-child(3),
-th:nth-child(4),
-td:nth-child(4),
 th:nth-child(5),
 td:nth-child(5),
 th:nth-child(6),
@@ -205,6 +248,13 @@ td:nth-child(6) {
   width: 170px;
   min-width: 170px;
   max-width: 170px;
+}
+
+th:nth-child(4),
+td:nth-child(4) {
+  width: 220px;
+  min-width: 220px;
+  max-width: 220px;
 }
 
 th:nth-child(7),
@@ -215,8 +265,8 @@ td:nth-child(7) {
 
 th:nth-child(8),
 td:nth-child(8) {
-  width: 320px;
-  min-width: 320px;
+  width: 210px;
+  min-width: 210px;
 }
 
 .desc-cell {
@@ -348,6 +398,36 @@ td select[data-edit-field] {
   gap: 8px;
 }
 
+.comment-cell-wrap {
+  grid-template-columns: 1fr;
+  justify-items: center;
+}
+
+.comment-cell-wrap .comment-cell {
+  width: 100%;
+}
+
+.comment-add-btn {
+  justify-self: center;
+}
+
+.comment-empty-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.action-cell {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+td:nth-child(8),
+td:nth-child(9) {
+  vertical-align: top;
+}
+
 .icon-only {
   cursor: pointer;
   width: 28px;
@@ -357,6 +437,12 @@ td select[data-edit-field] {
   background: var(--panel-muted);
   color: var(--text);
   line-height: 1;
+}
+
+.icon-only.danger {
+  border-color: #fecaca;
+  color: #b91c1c;
+  background: #fef2f2;
 }
 
 .cell-edit {
@@ -425,12 +511,99 @@ td select[data-edit-field] {
   background: #fef3c7;
 }
 
+.chip-issue-bug {
+  color: #9f1239;
+  background: #ffe4e6;
+}
+
+.chip-issue-feature {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.chip-issue-question {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
 .pager {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
   margin-top: 12px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 8, 23, 0.4);
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.modal-card {
+  width: min(760px, 96vw);
+  max-height: 92vh;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  padding: 14px;
+}
+
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.modal-head h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.modal-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.modal-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.modal-form .full {
+  grid-column: 1 / -1;
+}
+
+.modal-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.confirm-card {
+  width: min(520px, 96vw);
+}
+
+.confirm-text {
+  margin: 4px 0 0;
+  color: var(--text);
 }
 
 .page-numbers {
@@ -460,6 +633,12 @@ td select[data-edit-field] {
   min-width: 58px;
 }
 
+.btn-danger {
+  border-color: #dc2626;
+  background: #dc2626;
+  color: #fff;
+}
+
 @media (max-width: 1200px) {
   .topbar {
     align-items: flex-start;
@@ -472,5 +651,9 @@ td select[data-edit-field] {
 
   input {
     min-width: 220px;
+  }
+
+  .modal-form {
+    grid-template-columns: 1fr;
   }
 }
