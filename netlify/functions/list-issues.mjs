@@ -1,11 +1,14 @@
 import {
   assertPasswordGate,
+  ENUMS,
   explodeRowsByDescriptionBullets,
   getDataStore,
   getLastAutoSyncAt,
   json,
   loadIssues
 } from "./_lib.mjs";
+
+const { CS_LIST } = ENUMS;
 
 export default async (request) => {
   try {
@@ -31,6 +34,8 @@ export default async (request) => {
     const lastAutoSyncAt = await getLastAutoSyncAt(store);
 
     const filtered = expanded.filter((r) => {
+      const desc = `${r.description || ""} ${r.comments || ""}`.toLowerCase();
+      if (!CS_LIST.some((name) => desc.includes(String(name || "").toLowerCase()))) return false;
       if (moduleFilter.length && !hasAnySelectedValue(r.module, moduleFilter)) return false;
       if (typeFilter.length && !hasAnySelectedValue(r.issueType, typeFilter)) return false;
       if (csFilter.length && !hasAnySelectedValue(r.cs, csFilter)) return false;

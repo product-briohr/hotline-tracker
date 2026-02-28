@@ -12,11 +12,9 @@
   void ensureAuthorized();
 
   async function ensureAuthorized() {
-    lockPage();
     const session = await readSession();
-    if (!session.enabled || session.authenticated) {
-      unlockPage();
-    }
+    if (!session.enabled || session.authenticated) return;
+    lockPage();
   }
 
   function lockPage() {
