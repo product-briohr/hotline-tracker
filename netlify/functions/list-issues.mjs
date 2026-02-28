@@ -1,4 +1,10 @@
-import { explodeRowsByDescriptionBullets, getDataStore, json, loadIssues } from "./_lib.mjs";
+import {
+  explodeRowsByDescriptionBullets,
+  getDataStore,
+  getLastAutoSyncAt,
+  json,
+  loadIssues
+} from "./_lib.mjs";
 
 export default async (request) => {
   try {
@@ -17,6 +23,8 @@ export default async (request) => {
     const store = getDataStore();
     const all = await loadIssues(store);
     const expanded = explodeRowsByDescriptionBullets(all);
+    const lastEditedAt = getLatestUpdatedAt(expanded);
+    const lastAutoSyncAt = await getLastAutoSyncAt(store);
 
     const filtered = expanded.filter((r) => {
       if (moduleFilter.length && !hasAnySelectedValue(r.module, moduleFilter)) return false;
@@ -42,6 +50,8 @@ export default async (request) => {
       ok: true,
       total: expanded.length,
       count: filtered.length,
+      lastAutoSyncAt,
+      lastEditedAt,
       pagination: {
         page: safePage,
         pageSize,
@@ -78,4 +88,20 @@ function hasAnySelectedValue(cellValue, selected) {
     .filter(Boolean);
   if (!values.length) return false;
   return selected.some((s) => values.includes(s));
+}
+
+function getLatestUpdatedAt(rows) {
+  let best = "";
+  let bestMs = 0;
+  for (const row of rows || []) {
+    const candidate = String(row?.updatedAt || row?.createdAt || "").trim();
+    if (!candidate) continue;
+    const ms = Date.parse(candidate);
+    if (!Number.isFinite(ms)) continue;
+    if (ms >= bestMs) {
+      bestMs = ms;
+      best = new Date(ms).toISOString();
+    }
+  }
+  return best;
 }

@@ -52,10 +52,18 @@ const THEME_KEY = "hotline-theme";
 
 const els = {
   search: document.querySelector("#search"),
+  clearFiltersBtn: document.querySelector("#clearFiltersBtn"),
+  dateFilter: document.querySelector("#dateFilter"),
+  moduleFilterMs: document.querySelector("#moduleFilterMs"),
+  issueTypeFilterMs: document.querySelector("#issueTypeFilterMs"),
+  csFilterMs: document.querySelector("#csFilterMs"),
+  pmOwnerFilterMs: document.querySelector("#pmOwnerFilterMs"),
+  tableFilters: document.querySelector(".table-filters"),
   newIssueBtn: document.querySelector("#newIssueBtn"),
   syncBtn: document.querySelector("#syncBtn"),
   themeToggle: document.querySelector("#themeToggle"),
   pageNumbers: document.querySelector("#pageNumbers"),
+  lastUpdated: document.querySelector("#lastUpdated"),
   toast: document.querySelector("#toast"),
   rows: document.querySelector("#rows"),
   newIssueModal: document.querySelector("#newIssueModal"),
@@ -86,6 +94,12 @@ const state = {
   editingCommentId: "",
   draftDescription: "",
   draftComment: "",
+  filterValues: {
+    module: [],
+    issueType: [],
+    cs: [],
+    pmOwner: []
+  },
   currentRows: [],
   rowsById: new Map(),
   deletingId: ""
@@ -96,12 +110,17 @@ init();
 function init() {
   applySavedTheme();
   setNewIssueOptions();
+  renderTableFilterMultiSelects();
   resetNewIssueForm();
   if (!isLocalDevHost()) {
     els.syncBtn.classList.add("hidden");
   }
 
   els.search.addEventListener("input", debounce(() => goToPage(1), 220));
+  els.clearFiltersBtn.addEventListener("click", clearAllFilters);
+  els.dateFilter.addEventListener("change", () => goToPage(1));
+  els.tableFilters.addEventListener("click", onFilterClick);
+  els.tableFilters.addEventListener("input", onFilterInput);
   els.newIssueBtn.addEventListener("click", openNewIssueModal);
   els.syncBtn.addEventListener("click", runSync);
   els.themeToggle.addEventListener("click", toggleTheme);
@@ -143,6 +162,11 @@ async function safeJson(res) {
 async function loadRows(options = {}) {
   const qs = new URLSearchParams();
   if (els.search.value.trim()) qs.set("q", els.search.value.trim());
+  if (els.dateFilter.value) qs.set("date", els.dateFilter.value);
+  for (const v of state.filterValues.module) qs.append("module", v);
+  for (const v of state.filterValues.issueType) qs.append("issueType", v);
+  for (const v of state.filterValues.cs) qs.append("cs", v);
+  for (const v of state.filterValues.pmOwner) qs.append("pmOwner", v);
   qs.set("page", String(state.page));
   qs.set("pageSize", String(PAGE_SIZE));
 
@@ -159,6 +183,7 @@ async function loadRows(options = {}) {
   state.rowsById = new Map(rows.map((row) => [row.id, row]));
   state.totalPages = Math.max(1, Number(data?.pagination?.totalPages || 1));
   state.totalCount = Number(data?.count || 0);
+  els.lastUpdated.textContent = `Last auto sync: ${formatLastUpdated(data?.lastAutoSyncAt)}`;
   state.page = Math.min(Math.max(1, Number(data?.pagination?.page || state.page)), state.totalPages);
   if (state.page > state.totalPages) state.page = state.totalPages;
 
@@ -209,13 +234,14 @@ function renderRow(row, idx) {
         </div>
       </div>`
     : String(row.comments || "").trim()
-      ? `<div class="cell-with-icon comment-cell-wrap">
+      ? `<div class="cell-with-icon">
           <span class="comment-cell">${renderRichText(row.comments || "")}</span>
           <button class="icon-only comment-add-btn" data-action="edit-comments" data-id="${escapeHtml(
             row.id
-          )}" title="Add/Edit comment">＋</button>
+          )}" title="Edit comment">✏️</button>
         </div>`
-      : `<div class="comment-empty-wrap">
+      : `<div class="cell-with-icon comment-empty-wrap">
+          <span class="comment-cell"></span>
           <button class="icon-only comment-add-btn" data-action="edit-comments" data-id="${escapeHtml(
             row.id
           )}" title="Add/Edit comment">＋</button>
@@ -275,7 +301,7 @@ function renderPillMultiSelect(field, values, current, id, isMulti = true) {
       </div>`
     : "";
 
-  return `<div class="ms" data-edit-field="${field}" data-id="${escapeHtml(id)}" data-multi="${
+  return `<div class="ms" data-context="row" data-edit-field="${field}" data-id="${escapeHtml(id)}" data-multi="${
     isMulti ? "1" : "0"
   }" data-values="${escapeHtml(
     encodeMultiValue(selected)
@@ -348,7 +374,9 @@ async function onTableClick(event) {
     const isOpen = cell.classList.contains("open");
     for (const other of document.querySelectorAll(".ms.open")) {
       if (other !== cell) {
-        await maybeSavePendingRowMultiSelect(other);
+        if (other.dataset.context === "row") {
+          await maybeSavePendingRowMultiSelect(other);
+        }
         other.classList.remove("open");
       }
     }
@@ -477,7 +505,7 @@ function onDocumentClick(event) {
   }
   if (event.target.closest(".ms")) return;
   for (const open of document.querySelectorAll(".ms.open")) {
-    if (open.dataset.context !== "modal") {
+    if (open.dataset.context === "row") {
       void maybeSavePendingRowMultiSelect(open);
     }
     open.classList.remove("open");
@@ -681,6 +709,10 @@ function setNewIssueOptions() {
   renderNewIssueMultiSelects({ module: [], cs: [], pmOwner: [] });
 }
 
+function setTableFilterOptions() {
+  renderTableFilterMultiSelects();
+}
+
 function resetNewIssueForm() {
   els.newDate.value = toIsoDateLocal(new Date());
   els.newIssueType.value = ISSUE_TYPES[0] || "Question/Troubleshooting";
@@ -811,7 +843,15 @@ function ordinal(day) {
 }
 
 function emptyState() {
-  return `<tr><td colspan="9" style="color:var(--muted);">No issues found for current filters.</td></tr>`;
+  return `<tr>
+    <td colspan="9" class="empty-cell">
+      <div class="empty-state">
+        <div class="empty-icon" aria-hidden="true">🔎</div>
+        <div class="empty-title">No issues found</div>
+        <div class="empty-subtitle">Try adjusting filters or clear them to see more records.</div>
+      </div>
+    </td>
+  </tr>`;
 }
 
 function applySavedTheme() {
@@ -976,4 +1016,118 @@ function toIsoDateLocal(inputDate) {
 function isLocalDevHost() {
   const host = String(location.hostname || "").toLowerCase();
   return host === "localhost" || host === "127.0.0.1";
+}
+
+function getSelectedValues(selectEl) {
+  return Array.from(selectEl.selectedOptions || [])
+    .map((opt) => opt.value)
+    .filter(Boolean);
+}
+
+function renderTableFilterMultiSelects() {
+  els.moduleFilterMs.innerHTML = renderFilterPillMultiSelect("module", MODULES, state.filterValues.module);
+  els.issueTypeFilterMs.innerHTML = renderFilterPillMultiSelect(
+    "issueType",
+    ISSUE_TYPES,
+    state.filterValues.issueType
+  );
+  els.csFilterMs.innerHTML = renderFilterPillMultiSelect("cs", CS_LIST, state.filterValues.cs);
+  els.pmOwnerFilterMs.innerHTML = renderFilterPillMultiSelect("pmOwner", PM_OWNERS, state.filterValues.pmOwner);
+}
+
+function renderFilterPillMultiSelect(field, values, selectedValues) {
+  const selected = Array.from(new Set(selectedValues || []));
+  const selectedSet = new Set(selected);
+  const chips = selected.length
+    ? selected.map((value) => renderValueChip(field, value)).join("")
+    : `<span class="chip chip-empty">All</span>`;
+  const options = values
+    .map((value) => {
+      const isSelected = selectedSet.has(value);
+      return `<div class="ms-option ${isSelected ? "selected" : ""}" data-action="toggle-filter-option" data-value="${escapeHtml(
+        value
+      )}">
+        ${renderValueChip(field, value)}
+        <span class="ms-check">${isSelected ? "✓" : ""}</span>
+      </div>`;
+    })
+    .join("");
+  return `<div class="ms filter-ms" data-context="filters" data-filter-field="${field}" data-multi="1" data-values="${escapeHtml(
+    encodeMultiValue(selected)
+  )}">
+    <button class="ms-trigger" data-action="toggle-ms" type="button">
+      <span class="ms-chips">${chips}</span>
+      <span class="ms-caret">▾</span>
+    </button>
+    <div class="ms-menu">
+      <input class="ms-search" type="text" placeholder="Search..." />
+      <div class="ms-options">${options}</div>
+    </div>
+  </div>`;
+}
+
+function onFilterInput(event) {
+  const target = event.target;
+  if (target instanceof HTMLInputElement && target.classList.contains("ms-search")) {
+    handleMultiSelectSearchInput(target);
+  }
+}
+
+function onFilterClick(event) {
+  const btn = event.target.closest("[data-action]");
+  if (!btn) return;
+  const action = btn.dataset.action;
+  if (action === "toggle-ms") {
+    event.stopPropagation();
+    const cell = btn.closest(".ms");
+    if (!cell) return;
+    for (const other of document.querySelectorAll(".ms.open")) {
+      if (other !== cell) other.classList.remove("open");
+    }
+    cell.classList.toggle("open");
+    return;
+  }
+  if (action === "toggle-filter-option") {
+    event.stopPropagation();
+    const option = btn.closest(".ms-option");
+    const cell = btn.closest(".ms");
+    if (!option || !cell) return;
+    const field = cell.dataset.filterField || "";
+    if (!field) return;
+    const value = option.dataset.value || "";
+    const selected = new Set(state.filterValues[field] || []);
+    if (selected.has(value)) selected.delete(value);
+    else selected.add(value);
+    state.filterValues[field] = Array.from(selected);
+    refreshMultiSelectVisual(cell, field, state.filterValues[field]);
+    goToPage(1);
+  }
+}
+
+function clearAllFilters() {
+  els.search.value = "";
+  els.dateFilter.value = "";
+  state.filterValues = {
+    module: [],
+    issueType: [],
+    cs: [],
+    pmOwner: []
+  };
+  renderTableFilterMultiSelects();
+  goToPage(1);
+}
+
+function formatLastUpdated(input) {
+  const raw = String(input || "").trim();
+  if (!raw) return "-";
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  return d.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true
+  });
 }

@@ -181,8 +181,67 @@ input::placeholder {
 
 .meta-row {
   min-height: 26px;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 12px;
   margin-bottom: 10px;
   color: var(--muted);
+}
+
+.meta-note {
+  color: var(--muted);
+  font-size: 13px;
+  margin-left: auto;
+  text-align: right;
+}
+
+.table-filters {
+  display: grid;
+  grid-template-columns: 180px 170px 220px 170px 170px minmax(400px, 1fr);
+  gap: 10px;
+  margin-bottom: 10px;
+  min-width: 1250px;
+}
+
+.table-filters label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 0;
+}
+
+.table-filters select[multiple] {
+  min-height: 86px;
+}
+
+.table-filters input,
+.table-filters select {
+  width: 100%;
+  min-width: 0;
+}
+
+.table-filters .ms {
+  width: 100%;
+  min-width: 0;
+}
+
+.table-filters .ms-trigger {
+  min-height: 40px;
+}
+
+.clear-filters-text {
+  grid-column: 6;
+  justify-self: end;
+  align-self: end;
+  background: none;
+  border: 0;
+  color: var(--brand);
+  font-size: 13px;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
 }
 
 .toast {
@@ -421,9 +480,12 @@ td select[data-edit-field] {
 }
 
 .comment-empty-wrap {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  grid-template-columns: 1fr;
+  justify-items: center;
+}
+
+.comment-empty-wrap .comment-cell {
+  display: none;
 }
 
 .action-cell {
@@ -642,10 +704,54 @@ td:nth-child(9) {
   min-width: 58px;
 }
 
+.app-footer {
+  margin-top: 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+
 .btn-danger {
   border-color: #dc2626;
   background: #dc2626;
   color: #fff;
+}
+
+.empty-cell {
+  padding: 28px 12px !important;
+}
+
+.empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.empty-icon {
+  font-size: 24px;
+  animation: empty-pulse 1.8s ease-in-out infinite;
+}
+
+.empty-title {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.empty-subtitle {
+  font-size: 13px;
+}
+
+@keyframes empty-pulse {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translateY(-2px) scale(1.08);
+    opacity: 1;
+  }
 }
 
 @media (max-width: 1200px) {

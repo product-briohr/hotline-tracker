@@ -468,6 +468,14 @@ export async function markProcessed(store, fileId) {
   await store.set(`processed:${fileId}`, "1");
 }
 
+export async function markAutoSyncSuccess(store, isoTime = new Date().toISOString()) {
+  await store.set("meta:lastAutoSyncAt", String(isoTime));
+}
+
+export async function getLastAutoSyncAt(store) {
+  return String((await store.get("meta:lastAutoSyncAt")) || "");
+}
+
 export function toIsoDate(dateInput) {
   const d = new Date(dateInput || new Date());
   const y = d.getUTCFullYear();
@@ -1008,18 +1016,21 @@ export async function runSyncOnce(options = {}) {
     const files = await listDocsRecursively(drive, folderId);
     const candidates = files.filter((f) => matchesKeywords(f.name));
     if (!candidates.length) {
+      await markAutoSyncSuccess(store);
       return json(200, { ok: true, inserted: 0, message: "No matching notes file found." });
     }
 
     const latest = candidates[0];
     const fileKey = latest.id;
     if (await isProcessed(store, fileKey)) {
+      await markAutoSyncSuccess(store);
       return json(200, { ok: true, inserted: 0, message: "Latest file already processed." });
     }
 
     const text = await exportDocText(drive, latest.id);
     if (!text || text.trim().length < 80) {
       await markProcessed(store, fileKey);
+      await markAutoSyncSuccess(store);
       return json(200, {
         ok: true,
         inserted: 0,
@@ -1043,6 +1054,7 @@ export async function runSyncOnce(options = {}) {
     const merged = [...stamped, ...issues].slice(0, 3000);
     await saveIssues(store, merged);
     await markProcessed(store, fileKey);
+    await markAutoSyncSuccess(store);
 
     return json(200, {
       ok: true,

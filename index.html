@@ -4,6 +4,24 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Product Hotline Tracker</title>
+    <meta
+      name="description"
+      content="Hotline issue tracker for Product Team with auto-sync, row edits, filters, and manual issue management."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Product Hotline Tracker" />
+    <meta
+      property="og:description"
+      content="Track hotline issues with auto-sync, filters, inline edits, and manual issue creation."
+    />
+    <meta property="og:image" content="/favicon.png" />
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:title" content="Product Hotline Tracker" />
+    <meta
+      property="twitter:description"
+      content="Track hotline issues with auto-sync, filters, inline edits, and manual issue creation."
+    />
+    <meta property="twitter:image" content="/favicon.png" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
@@ -12,11 +30,10 @@
       <header class="topbar">
         <div class="topbar-title">
           <h1>Product Hotline Tracker</h1>
-          <p>Auto-synced from Gemini notes in Google Drive</p>
+          <p>Made with <span aria-hidden="true">❤️</span> by BrioHR Product Team</p>
         </div>
         <div class="topbar-actions">
-          <input id="search" placeholder="Search description/comments..." />
-          <button id="newIssueBtn" class="btn" type="button">New Issue</button>
+          <button id="newIssueBtn" class="btn" type="button">+ New Issue</button>
           <button id="themeToggle" class="theme-switch" type="button" aria-label="Toggle theme" aria-pressed="false">
             <span class="theme-icon sun">☀</span>
             <span class="theme-icon moon">☾</span>
@@ -27,7 +44,18 @@
       </header>
 
       <section class="meta-row">
+        <span id="lastUpdated" class="meta-note">Last updated: -</span>
         <span id="toast" class="toast"></span>
+      </section>
+
+      <section class="table-filters">
+        <label class="f-date">Date<input id="dateFilter" type="date" /></label>
+        <label class="f-module">Module<div id="moduleFilterMs"></div></label>
+        <label class="f-issue-type">Issue Type<div id="issueTypeFilterMs"></div></label>
+        <label class="f-cs">CS<div id="csFilterMs"></div></label>
+        <label class="f-pm-owner">PM Owner<div id="pmOwnerFilterMs"></div></label>
+        <label class="f-search">Issue/Question Search<input id="search" placeholder="Search issue/question..." /></label>
+        <button id="clearFiltersBtn" class="clear-filters-text" type="button">Clear filters</button>
       </section>
 
       <section class="table-wrap">
@@ -52,6 +80,7 @@
       <section class="pager">
         <div id="pageNumbers" class="page-numbers"></div>
       </section>
+
     </main>
 
     <div id="newIssueModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="newIssueTitle">
