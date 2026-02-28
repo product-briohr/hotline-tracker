@@ -1,5 +1,4 @@
 const MODULES = [
-  "",
   "Claims",
   "Emails",
   "Feed",
@@ -24,10 +23,8 @@ const MODULES = [
   "Others/General",
   "Public Holiday"
 ];
-
-const ISSUE_TYPES = ["", "Bug (CS ticket)", "Feature request", "Question/Troubleshooting"];
+const ISSUE_TYPES = ["Bug (CS ticket)", "Feature request", "Question/Troubleshooting"];
 const CS_LIST = [
-  "",
   "Adila",
   "Arveena",
   "Awana",
@@ -48,126 +45,455 @@ const CS_LIST = [
   "Pavanjeet",
   "Aqilah"
 ];
-const PM_OWNERS = ["", "Amir", "Idris Ashari", "Nita Puspita", "Nico"];
+const PM_OWNERS = ["Amir", "Idris Ashari", "Nita Puspita", "Nico"];
+const PAGE_SIZE = 10;
+const PAGE_WINDOW_SIZE = 10;
+const THEME_KEY = "hotline-theme";
 
 const els = {
   search: document.querySelector("#search"),
-  dateFrom: document.querySelector("#dateFrom"),
-  dateTo: document.querySelector("#dateTo"),
-  moduleFilter: document.querySelector("#moduleFilter"),
-  typeFilter: document.querySelector("#typeFilter"),
-  csFilter: document.querySelector("#csFilter"),
-  pmFilter: document.querySelector("#pmFilter"),
-  clearBtn: document.querySelector("#clearBtn"),
   syncBtn: document.querySelector("#syncBtn"),
-  syncToken: document.querySelector("#syncToken"),
-  stats: document.querySelector("#stats"),
+  themeToggle: document.querySelector("#themeToggle"),
+  pageNumbers: document.querySelector("#pageNumbers"),
   toast: document.querySelector("#toast"),
   rows: document.querySelector("#rows")
 };
 
 const state = {
-  editingId: null
+  page: 1,
+  totalPages: 1,
+  totalCount: 0,
+  scrollToTableOnNextLoad: false,
+  editingDescriptionId: "",
+  editingCommentId: "",
+  draftDescription: "",
+  draftComment: "",
+  currentRows: [],
+  rowsById: new Map()
 };
 
 init();
 
 function init() {
-  setOptions(els.moduleFilter, MODULES, "All modules");
-  setOptions(els.typeFilter, ISSUE_TYPES, "All issue types");
-  setOptions(els.csFilter, CS_LIST, "All CS");
-  setOptions(els.pmFilter, PM_OWNERS, "All PM owners");
+  applySavedTheme();
 
-  const controls = [
-    els.search,
-    els.dateFrom,
-    els.dateTo,
-    els.moduleFilter,
-    els.typeFilter,
-    els.csFilter,
-    els.pmFilter
-  ];
-  controls.forEach((el) => el.addEventListener("input", debounce(loadRows, 240)));
-  els.clearBtn.addEventListener("click", clearFilters);
+  els.search.addEventListener("input", debounce(() => goToPage(1), 220));
   els.syncBtn.addEventListener("click", runSync);
+  els.themeToggle.addEventListener("click", toggleTheme);
   els.rows.addEventListener("click", onTableClick);
+  els.rows.addEventListener("input", onTableInput);
+  els.rows.addEventListener("change", onTableChange);
+  els.pageNumbers.addEventListener("click", onPageNumbersClick);
+  document.addEventListener("click", onDocumentClick);
 
   loadRows();
   setInterval(() => {
-    if (!state.editingId) loadRows();
+    if (!state.editingDescriptionId && !state.editingCommentId) loadRows();
   }, 15000);
 }
 
-function setOptions(select, values, fallbackLabel) {
-  select.innerHTML = values
-    .map((v) => `<option value="${escapeHtml(v)}">${v || fallbackLabel}</option>`)
-    .join("");
+function goToPage(page) {
+  state.page = Math.max(1, page);
+  loadRows();
+}
+
+async function safeJson(res) {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { ok: false, error: text.slice(0, 200) };
+  }
 }
 
 async function loadRows() {
   const qs = new URLSearchParams();
   if (els.search.value.trim()) qs.set("q", els.search.value.trim());
-  if (els.dateFrom.value) qs.set("dateFrom", els.dateFrom.value);
-  if (els.dateTo.value) qs.set("dateTo", els.dateTo.value);
-  if (els.moduleFilter.value) qs.set("module", els.moduleFilter.value);
-  if (els.typeFilter.value) qs.set("issueType", els.typeFilter.value);
-  if (els.csFilter.value) qs.set("cs", els.csFilter.value);
-  if (els.pmFilter.value) qs.set("pmOwner", els.pmFilter.value);
+  qs.set("page", String(state.page));
+  qs.set("pageSize", String(PAGE_SIZE));
 
   const res = await fetch(`/api/issues?${qs.toString()}`);
-  const data = await res.json();
+  const data = await safeJson(res);
   if (!data.ok) {
-    els.stats.textContent = `Failed to load: ${data.error || "Unknown error"}`;
+    els.toast.style.color = "var(--danger)";
+    els.toast.textContent = `Failed to load: ${data.error || "Unknown error"}`;
     return;
   }
 
-  els.stats.textContent = `${data.count} shown / ${data.total} total`;
-  els.rows.innerHTML = data.rows.map(renderRow).join("") || emptyState();
+  const rows = data.rows || [];
+  state.currentRows = rows;
+  state.rowsById = new Map(rows.map((row) => [row.id, row]));
+  state.totalPages = Math.max(1, Number(data?.pagination?.totalPages || 1));
+  state.totalCount = Number(data?.count || 0);
+  state.page = Math.min(Math.max(1, Number(data?.pagination?.page || state.page)), state.totalPages);
+  if (state.page > state.totalPages) state.page = state.totalPages;
+
+  renderPageNumbers();
+  els.toast.textContent = "";
+  renderTable();
+  if (state.scrollToTableOnNextLoad) {
+    const tableWrap = document.querySelector(".table-wrap");
+    if (tableWrap) tableWrap.scrollIntoView({ behavior: "smooth", block: "start" });
+    state.scrollToTableOnNextLoad = false;
+  }
 }
 
-function renderRow(r) {
-  if (state.editingId === r.id) return renderEditableRow(r);
-  return `<tr>
-    <td>${escapeHtml(formatDisplayDate(r.date))}</td>
-    <td><span class="badge">${escapeHtml(r.module || "")}</span></td>
-    <td>${escapeHtml(r.issueType || "")}</td>
-    <td>${escapeHtml(r.cs || "")}</td>
-    <td>${escapeHtml(r.pmOwner || "")}</td>
-    <td class="desc-cell">${escapeHtml(r.description || "")}</td>
-    <td>${escapeHtml(r.comments || "")}</td>
-    <td>
-      <button class="icon-btn" data-action="edit" data-id="${escapeHtml(r.id)}" title="Edit row">✏️</button>
-    </td>
+function renderTable() {
+  els.rows.innerHTML = state.currentRows.map((row, idx) => renderRow(row, idx)).join("") || emptyState();
+  autoSizeVisibleTextareas();
+}
+
+function renderRow(row, idx) {
+  const rowNumber = (state.page - 1) * PAGE_SIZE + idx + 1;
+  const isEditingDesc = state.editingDescriptionId === row.id;
+  const isEditingComment = state.editingCommentId === row.id;
+
+  const descriptionCell = isEditingDesc
+    ? `<div class="cell-edit">
+        <textarea data-field="description" data-id="${escapeHtml(row.id)}" rows="4">${escapeHtml(state.draftDescription)}</textarea>
+        <div class="mini-actions">
+          <button class="mini-btn save" data-action="save-description" data-id="${escapeHtml(row.id)}">Save</button>
+          <button class="mini-btn" data-action="cancel-description">Cancel</button>
+        </div>
+      </div>`
+    : `<div class="cell-with-icon">
+        <span class="desc-cell">${renderRichText(row.description || "")}</span>
+        <button class="icon-only" data-action="edit-description" data-id="${escapeHtml(row.id)}" title="Edit description">✏️</button>
+      </div>`;
+
+  const commentsCell = isEditingComment
+    ? `<div class="cell-edit">
+        <textarea data-field="comments" data-id="${escapeHtml(row.id)}" rows="4">${escapeHtml(state.draftComment)}</textarea>
+        <div class="mini-actions">
+          <button class="mini-btn save" data-action="save-comments" data-id="${escapeHtml(row.id)}">Save</button>
+          <button class="mini-btn" data-action="cancel-comments">Cancel</button>
+        </div>
+      </div>`
+    : `<div class="cell-with-icon">
+        <span class="comment-cell">${renderRichText(row.comments || "")}</span>
+        <button class="icon-only" data-action="edit-comments" data-id="${escapeHtml(row.id)}" title="Add/Edit comment">＋</button>
+      </div>`;
+
+  return `<tr data-id="${escapeHtml(row.id)}">
+    <td>${rowNumber}</td>
+    <td>${escapeHtml(formatDisplayDate(row.date))}</td>
+    <td>${renderPillMultiSelect("module", MODULES, row.module, row.id)}</td>
+    <td>${renderPillMultiSelect("issueType", ISSUE_TYPES, row.issueType, row.id, false)}</td>
+    <td>${renderPillMultiSelect("cs", CS_LIST, row.cs, row.id)}</td>
+    <td>${renderPillMultiSelect("pmOwner", PM_OWNERS, row.pmOwner, row.id)}</td>
+    <td>${descriptionCell}</td>
+    <td>${commentsCell}</td>
   </tr>`;
 }
 
-function renderEditableRow(r) {
-  return `<tr class="editing-row">
-    <td>${escapeHtml(formatDisplayDate(r.date))}</td>
-    <td>${renderSelect("module", MODULES.slice(1), r.module)}</td>
-    <td>${renderSelect("issueType", ISSUE_TYPES.slice(1), r.issueType)}</td>
-    <td>${renderSelect("cs", CS_LIST.slice(1), r.cs)}</td>
-    <td>${renderSelect("pmOwner", PM_OWNERS.slice(1), r.pmOwner)}</td>
-    <td>
-      <textarea data-field="description" rows="4">${escapeHtml(r.description || "")}</textarea>
-    </td>
-    <td>
-      <textarea data-field="comments" rows="3">${escapeHtml(r.comments || "")}</textarea>
-    </td>
-    <td>
-      <div class="row-actions">
-        <button class="btn btn-primary" data-action="save" data-id="${escapeHtml(r.id)}">Save</button>
-        <button class="btn" data-action="cancel">Cancel</button>
-      </div>
-    </td>
-  </tr>`;
-}
-
-function renderSelect(field, values, current) {
+function renderRowSelect(field, values, current, id, isMulti = false) {
+  const selectedValues = isMulti ? new Set(parseMultiValue(current)) : new Set([String(current || "")]);
   const options = values
-    .map((v) => `<option value="${escapeHtml(v)}" ${v === current ? "selected" : ""}>${escapeHtml(v)}</option>`)
+    .map((value) => {
+      const selected = selectedValues.has(value) ? "selected" : "";
+      return `<option value="${escapeHtml(value)}" ${selected}>${escapeHtml(value)}</option>`;
+    })
     .join("");
-  return `<select data-field="${field}">${options}</select>`;
+  const multiAttr = isMulti ? "multiple" : "";
+  return `<select data-edit-field="${field}" data-id="${escapeHtml(id)}" ${multiAttr}>${options}</select>`;
+}
+
+function renderPillMultiSelect(field, values, current, id, isMulti = true) {
+  const selected = parseMultiValue(current);
+  const selectedValues = isMulti ? selected : selected.slice(0, 1);
+  const selectedSet = new Set(selectedValues);
+  const chips = selectedValues.length
+    ? selectedValues.map((value) => renderChip(value)).join("")
+    : `<span class="chip chip-empty">Select</span>`;
+
+  const options = values
+    .map((value) => {
+      const isSelected = selectedSet.has(value);
+      return `<div class="ms-option ${isSelected ? "selected" : ""}" data-action="toggle-ms-option" data-value="${escapeHtml(
+        value
+      )}">
+        ${renderChip(value)}
+        <span class="ms-check">${isSelected ? "✓" : ""}</span>
+      </div>`;
+    })
+    .join("");
+
+  return `<div class="ms" data-edit-field="${field}" data-id="${escapeHtml(id)}" data-multi="${
+    isMulti ? "1" : "0"
+  }" data-values="${escapeHtml(
+    encodeMultiValue(selected)
+  )}">
+    <button class="ms-trigger" data-action="toggle-ms" type="button">
+      <span class="ms-chips">${chips}</span>
+      <span class="ms-caret">▾</span>
+    </button>
+    <div class="ms-menu">
+      <input class="ms-search" type="text" placeholder="Search..." />
+      <div class="ms-options">${options}</div>
+    </div>
+  </div>`;
+}
+
+function renderChip(value) {
+  const tone = chipToneClass(value);
+  return `<span class="chip ${tone}">${escapeHtml(value)}</span>`;
+}
+
+function chipToneClass(value) {
+  let hash = 0;
+  for (const ch of String(value || "")) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  const tones = ["chip-tone-1", "chip-tone-2", "chip-tone-3", "chip-tone-4", "chip-tone-5"];
+  return tones[hash % tones.length];
+}
+
+function onTableInput(event) {
+  const target = event.target;
+  if (target instanceof HTMLTextAreaElement) {
+    autoSizeTextarea(target);
+    if (target.dataset.field === "description") state.draftDescription = target.value;
+    if (target.dataset.field === "comments") state.draftComment = target.value;
+    return;
+  }
+
+  if (target instanceof HTMLInputElement && target.classList.contains("ms-search")) {
+    const menu = target.closest(".ms-menu");
+    if (!menu) return;
+    const q = target.value.trim().toLowerCase();
+    const options = menu.querySelectorAll(".ms-option");
+    for (const opt of options) {
+      const label = opt.textContent.toLowerCase();
+      opt.style.display = !q || label.includes(q) ? "" : "none";
+    }
+  }
+}
+
+async function onTableClick(event) {
+  const btn = event.target.closest("[data-action]");
+  if (!btn) return;
+
+  const action = btn.dataset.action;
+  const id = btn.dataset.id || "";
+  const row = state.rowsById.get(id);
+
+  if (action === "toggle-ms") {
+    event.stopPropagation();
+    const cell = btn.closest(".ms");
+    if (!cell) return;
+    for (const other of document.querySelectorAll(".ms.open")) {
+      if (other !== cell) other.classList.remove("open");
+    }
+    cell.classList.toggle("open");
+    return;
+  }
+
+  if (action === "toggle-ms-option") {
+    event.stopPropagation();
+    const option = btn.closest(".ms-option");
+    const cell = btn.closest(".ms");
+    if (!option || !cell) return;
+    const field = cell.dataset.editField || "";
+    const rowId = cell.dataset.id || "";
+    const base = state.rowsById.get(rowId);
+    if (!field || !base) return;
+
+    const value = option.dataset.value || "";
+    const isMulti = cell.dataset.multi !== "0";
+    const selected = new Set(parseMultiValue(cell.dataset.values || ""));
+    if (isMulti) {
+      if (selected.has(value)) selected.delete(value);
+      else selected.add(value);
+    } else {
+      selected.clear();
+      selected.add(value);
+    }
+    const merged = encodeMultiValue(Array.from(selected));
+    cell.dataset.values = merged;
+    await saveRowPatch(rowId, { ...base, [field]: merged });
+    if (!isMulti) cell.classList.remove("open");
+    return;
+  }
+
+  if (action === "edit-description" && row) {
+    state.editingCommentId = "";
+    state.editingDescriptionId = id;
+    state.draftDescription = row.description || "";
+    renderTable();
+    return;
+  }
+  if (action === "cancel-description") {
+    state.editingDescriptionId = "";
+    state.draftDescription = "";
+    await loadRows();
+    return;
+  }
+  if (action === "save-description" && row) {
+    const nextDescription = state.draftDescription;
+    state.editingDescriptionId = "";
+    state.draftDescription = "";
+    await saveRowPatch(id, { description: nextDescription, comments: row.comments || "" });
+    return;
+  }
+
+  if (action === "edit-comments" && row) {
+    state.editingDescriptionId = "";
+    state.editingCommentId = id;
+    state.draftComment = row.comments || "";
+    renderTable();
+    return;
+  }
+  if (action === "cancel-comments") {
+    state.editingCommentId = "";
+    state.draftComment = "";
+    await loadRows();
+    return;
+  }
+  if (action === "save-comments" && row) {
+    const nextComments = state.draftComment;
+    state.editingCommentId = "";
+    state.draftComment = "";
+    await saveRowPatch(id, { description: row.description || "", comments: nextComments });
+  }
+}
+
+function onDocumentClick(event) {
+  if (event.target.closest(".ms")) return;
+  for (const open of document.querySelectorAll(".ms.open")) {
+    open.classList.remove("open");
+  }
+}
+
+function autoSizeVisibleTextareas() {
+  const textareas = els.rows.querySelectorAll("textarea[data-field='description'], textarea[data-field='comments']");
+  for (const textarea of textareas) {
+    autoSizeTextarea(textarea);
+  }
+}
+
+function autoSizeTextarea(textarea) {
+  textarea.style.height = "auto";
+  textarea.style.height = `${textarea.scrollHeight}px`;
+}
+
+async function onTableChange(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLSelectElement)) return;
+  const field = target.dataset.editField;
+  const id = target.dataset.id || "";
+  if (!field || !id) return;
+  const row = state.rowsById.get(id);
+  if (!row) return;
+
+  const value = target.multiple
+    ? encodeMultiValue(
+        Array.from(target.selectedOptions || [])
+          .map((opt) => opt.value)
+          .filter(Boolean)
+      )
+    : target.value;
+
+  await saveRowPatch(id, {
+    ...row,
+    [field]: value
+  });
+}
+
+async function saveRowPatch(id, fields) {
+  const row = state.rowsById.get(id);
+  if (!row) return;
+
+  const payload = {
+    id,
+    date: fields.date ?? row.date ?? "",
+    module: fields.module ?? row.module ?? "",
+    issueType: fields.issueType ?? row.issueType ?? "",
+    cs: fields.cs ?? row.cs ?? "",
+    pmOwner: fields.pmOwner ?? row.pmOwner ?? "",
+    description: fields.description ?? row.description ?? "",
+    comments: fields.comments ?? row.comments ?? ""
+  };
+
+  try {
+    const res = await fetch("/api/issues/update", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await safeJson(res);
+    if (!data.ok) {
+      els.toast.style.color = "var(--danger)";
+      els.toast.textContent = data.error || "Update failed";
+      return;
+    }
+    els.toast.style.color = "var(--success)";
+    els.toast.textContent = "Row updated";
+    await loadRows();
+  } catch (error) {
+    els.toast.style.color = "var(--danger)";
+    els.toast.textContent = String(error?.message || error);
+  }
+}
+
+function renderPageNumbers() {
+  const buttons = [];
+  const windowStart = Math.floor((state.page - 1) / PAGE_WINDOW_SIZE) * PAGE_WINDOW_SIZE + 1;
+  const windowEnd = Math.min(state.totalPages, windowStart + PAGE_WINDOW_SIZE - 1);
+
+  if (windowStart > 1) {
+    buttons.push(
+      `<button class="page-btn nav" data-page="${windowStart - 1}" type="button">Prev</button>`
+    );
+  }
+
+  for (let p = windowStart; p <= windowEnd; p += 1) {
+    const active = p === state.page ? "active" : "";
+    buttons.push(
+      `<button class="page-btn ${active}" data-page="${p}" type="button">${p}</button>`
+    );
+  }
+
+  if (windowEnd < state.totalPages) {
+    buttons.push(
+      `<button class="page-btn nav" data-page="${windowEnd + 1}" type="button">Next</button>`
+    );
+  }
+  els.pageNumbers.innerHTML = buttons.join("");
+}
+
+function onPageNumbersClick(event) {
+  const btn = event.target.closest("button[data-page]");
+  if (!btn) return;
+  const p = Number(btn.dataset.page || 1);
+  if (p >= 1 && p <= state.totalPages && p !== state.page) {
+    state.scrollToTableOnNextLoad = true;
+    goToPage(p);
+  }
+}
+
+async function runSync() {
+  const original = els.syncBtn.textContent;
+  els.syncBtn.disabled = true;
+  els.syncBtn.textContent = "Syncing...";
+  els.toast.textContent = "";
+
+  try {
+    const res = await fetch("/api/sync", { method: "POST" });
+    const data = await safeJson(res);
+    if (!data.ok) {
+      els.toast.style.color = "var(--danger)";
+      els.toast.textContent = data.error || "Sync failed";
+      return;
+    }
+    els.toast.style.color = "var(--success)";
+    els.toast.textContent = data.message || "Sync completed";
+    state.page = 1;
+    await loadRows();
+  } catch (error) {
+    els.toast.style.color = "var(--danger)";
+    els.toast.textContent = String(error?.message || error);
+  } finally {
+    els.syncBtn.disabled = false;
+    els.syncBtn.textContent = original;
+  }
 }
 
 function formatDisplayDate(dateStr) {
@@ -190,116 +516,24 @@ function ordinal(day) {
   return "th";
 }
 
-function renderSource(r) {
-  if (!r.sourceFileLink) return escapeHtml(r.sourceFileName || "");
-  return `<a href="${escapeHtml(r.sourceFileLink)}" target="_blank" rel="noreferrer">${escapeHtml(
-    r.sourceFileName || "Open"
-  )}</a>`;
-}
-
 function emptyState() {
-  return `<tr><td colspan="8" style="color:#8f9bb3;">No issues found for current filters.</td></tr>`;
+  return `<tr><td colspan="8" style="color:var(--muted);">No issues found for current filters.</td></tr>`;
 }
 
-function clearFilters() {
-  els.search.value = "";
-  els.dateFrom.value = "";
-  els.dateTo.value = "";
-  els.moduleFilter.value = "";
-  els.typeFilter.value = "";
-  els.csFilter.value = "";
-  els.pmFilter.value = "";
-  loadRows();
+function applySavedTheme() {
+  const saved = localStorage.getItem(THEME_KEY);
+  applyTheme(saved === "dark" ? "dark" : "light");
 }
 
-async function runSync() {
-  const token = els.syncToken.value.trim();
-  const headers = {};
-  if (token) headers.authorization = `Bearer ${token}`;
-
-  const original = els.syncBtn.textContent;
-  els.syncBtn.disabled = true;
-  els.syncBtn.textContent = "Syncing...";
-  els.toast.textContent = "";
-
-  try {
-    const res = await fetch("/api/sync?force=1", { method: "POST", headers });
-    const data = await res.json();
-    if (!data.ok) {
-      els.toast.style.color = "#ff8f8f";
-      els.toast.textContent = data.error || "Sync failed";
-      return;
-    }
-    els.toast.style.color = "#9be4aa";
-    els.toast.textContent = data.message || `Synced: ${data.inserted || 0} rows`;
-    await loadRows();
-  } catch (error) {
-    els.toast.style.color = "#ff8f8f";
-    els.toast.textContent = String(error?.message || error);
-  } finally {
-    els.syncBtn.disabled = false;
-    els.syncBtn.textContent = original;
-  }
+function toggleTheme() {
+  const current = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+  applyTheme(current === "dark" ? "light" : "dark");
 }
 
-async function onTableClick(event) {
-  const btn = event.target.closest("button[data-action]");
-  if (!btn) return;
-
-  const action = btn.dataset.action;
-  if (action === "edit") {
-    state.editingId = btn.dataset.id;
-    await loadRows();
-    return;
-  }
-  if (action === "cancel") {
-    state.editingId = null;
-    await loadRows();
-    return;
-  }
-  if (action === "save") {
-    await saveEditedRow(btn.dataset.id);
-  }
-}
-
-async function saveEditedRow(id) {
-  const row = document.querySelector(".editing-row");
-  if (!row) return;
-
-  const payload = {
-    id,
-    module: row.querySelector('[data-field="module"]')?.value || "",
-    issueType: row.querySelector('[data-field="issueType"]')?.value || "",
-    cs: row.querySelector('[data-field="cs"]')?.value || "",
-    pmOwner: row.querySelector('[data-field="pmOwner"]')?.value || "",
-    description: row.querySelector('[data-field="description"]')?.value || "",
-    comments: row.querySelector('[data-field="comments"]')?.value || ""
-  };
-
-  const headers = { "content-type": "application/json" };
-  const token = els.syncToken.value.trim();
-  if (token) headers.authorization = `Bearer ${token}`;
-
-  try {
-    const res = await fetch("/api/issues/update", {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
-    if (!data.ok) {
-      els.toast.style.color = "#ff8f8f";
-      els.toast.textContent = data.error || "Update failed";
-      return;
-    }
-    els.toast.style.color = "#9be4aa";
-    els.toast.textContent = "Row updated";
-    state.editingId = null;
-    await loadRows();
-  } catch (error) {
-    els.toast.style.color = "#ff8f8f";
-    els.toast.textContent = String(error?.message || error);
-  }
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  localStorage.setItem(THEME_KEY, theme);
+  els.themeToggle.textContent = theme === "dark" ? "Light mode" : "Dark mode";
 }
 
 function debounce(fn, ms) {
@@ -317,4 +551,26 @@ function escapeHtml(input) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function renderRichText(input) {
+  const escaped = escapeHtml(input || "");
+  return escaped.replace(
+    /\b((?:https?:\/\/|www\.)[^\s<>"']+)/gi,
+    (match) => {
+      const href = match.toLowerCase().startsWith("www.") ? `https://${match}` : match;
+      return `<a href="${href}" target="_blank" rel="noopener noreferrer">${match}</a>`;
+    }
+  );
+}
+
+function parseMultiValue(input) {
+  return String(input || "")
+    .split(/\s*\|\s*|,\s*/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+function encodeMultiValue(values) {
+  return Array.from(new Set((values || []).map((v) => String(v || "").trim()).filter(Boolean))).join(" | ");
 }

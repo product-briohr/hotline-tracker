@@ -57,6 +57,10 @@ const CS_LIST = [
 ];
 
 const PM_OWNERS = ["Amir", "Idris Ashari", "Nita Puspita", "Nico"];
+const CS_NAME_ALIASES = [
+  [/\bnoor\s+diyana\s+binti\s+kaseharom\b/gi, "Diyana"],
+  [/\bnur\s+diyana\s+binti\s+sajali\b/gi, "Yana"]
+];
 
 export const ENUMS = {
   MODULES,
@@ -96,17 +100,29 @@ const ISSUE_KEYWORDS = [
 ];
 
 const SPEAKER_KEYWORDS =
-  /\braised\b|\breported\b|\bdiscussed\b|\bmentioned\b|\brequested\b|\bconfirmed\b|\bpresented\b|\binquired\b|\bsuggested\b/i;
+  /\braised\b|\breported\b|\bdiscussed\b|\bmentioned\b|\brequest(?:ed|s|ing)?\b|\bconfirmed\b|\bstat(?:ed|es|ing)?\b|\bpresented\b|\binquir(?:ed|es|ing)?\b|\bsuggest(?:ed|s|ing)?\b|\backnowledged\b|\bcommitted\b|\binstructed\b|\badvised\b|\bescalated\b|\bnote(?:d|s)?\b/i;
 const SPEAKER_KEYWORD_PRIORITY = [
+  "acknowledged",
+  "committed",
+  "instructed",
+  "noted",
+  "note",
+  "advised",
+  "escalated",
   "raised",
   "reported",
   "discussed",
   "mentioned",
+  "request",
   "requested",
   "suggested",
   "confirmed",
+  "stated",
+  "state",
   "presented",
-  "inquired"
+  "inquire",
+  "inquired",
+  "suggest"
 ];
 
 export function json(statusCode, body) {
@@ -393,13 +409,33 @@ function normalizeEnum(input, allowed, fallback) {
 
 export function sanitizeEditableRow(input) {
   return {
-    module: normalizeEnum(input?.module, MODULES, "Others/General"),
-    issueType: normalizeEnum(input?.issueType, ISSUE_TYPES, "Question/Troubleshooting"),
-    cs: normalizeEnum(input?.cs, CS_LIST, ""),
-    pmOwner: normalizeEnum(input?.pmOwner, PM_OWNERS, ""),
+    date: normalizeDate(input?.date, toIsoDate()),
+    module: normalizeEnumMulti(input?.module, MODULES, "Others/General"),
+    issueType: normalizeEnumMulti(input?.issueType, ISSUE_TYPES, "Question/Troubleshooting"),
+    cs: normalizeEnumMulti(input?.cs, CS_LIST, ""),
+    pmOwner: normalizeEnumMulti(input?.pmOwner, PM_OWNERS, ""),
     description: String(input?.description || "").trim(),
     comments: String(input?.comments || "").trim().slice(0, 2000)
   };
+}
+
+function normalizeEnumMulti(input, allowed, fallback) {
+  const rawValues = Array.isArray(input)
+    ? input
+    : String(input || "")
+        .split(/\s*\|\s*|,\s*/)
+        .map((x) => x.trim())
+        .filter(Boolean);
+
+  const normalized = [];
+  for (const raw of rawValues) {
+    const hit = normalizeEnum(raw, allowed, "");
+    if (hit) normalized.push(hit);
+  }
+
+  const unique = Array.from(new Set(normalized));
+  if (!unique.length) return fallback;
+  return unique.join(" | ");
 }
 
 export function reclassifyRowByDescription(row, options = {}) {
@@ -438,6 +474,69 @@ export function toIsoDate(dateInput) {
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
   const day = String(d.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+function parseMeetingDateFromNotes(notesText) {
+  const lines = String(notesText || "")
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 30);
+
+  for (const line of lines) {
+    const parsed = parseDateLineToIso(line);
+    if (parsed) return parsed;
+  }
+  return "";
+}
+
+function parseDateLineToIso(line) {
+  const raw = String(line || "").trim();
+  if (!raw) return "";
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+  const monthRe =
+    /\b(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|sept|october|oct|november|nov|december|dec)\b[.\s,/-]*(\d{1,2})(?:st|nd|rd|th)?[,\s/-]*(\d{4})\b/i;
+  const m1 = raw.match(monthRe);
+  if (m1) {
+    const month = monthNameToNumber(m1[1]);
+    const day = String(Number(m1[2])).padStart(2, "0");
+    const year = m1[3];
+    if (month) return `${year}-${month}-${day}`;
+  }
+
+  const dayMonthRe =
+    /\b(\d{1,2})(?:st|nd|rd|th)?[\s/-]*(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|sept|october|oct|november|nov|december|dec)[,\s/-]*(\d{4})\b/i;
+  const m2 = raw.match(dayMonthRe);
+  if (m2) {
+    const day = String(Number(m2[1])).padStart(2, "0");
+    const month = monthNameToNumber(m2[2]);
+    const year = m2[3];
+    if (month) return `${year}-${month}-${day}`;
+  }
+
+  return "";
+}
+
+function monthNameToNumber(input) {
+  const key = String(input || "").toLowerCase().slice(0, 3);
+  const map = {
+    jan: "01",
+    feb: "02",
+    mar: "03",
+    apr: "04",
+    may: "05",
+    jun: "06",
+    jul: "07",
+    aug: "08",
+    sep: "09",
+    oct: "10",
+    nov: "11",
+    dec: "12"
+  };
+  return map[key] || "";
 }
 
 export function matchesKeywords(name) {
@@ -617,6 +716,9 @@ function inferPerson(text, allowed) {
 }
 
 function inferParticipantsFromKeywordClauses(text) {
+  const normalizedTextForCs = normalizeCsAliases(String(text || ""));
+  const uniqueCsMention = findUniqueMentionedName(normalizedTextForCs, CS_LIST);
+  const uniquePmMention = findUniqueMentionedName(String(text || ""), PM_OWNERS);
   const clauses = String(text || "")
     .split(/[\.\n;]+/)
     .map((s) => s.trim())
@@ -624,45 +726,57 @@ function inferParticipantsFromKeywordClauses(text) {
     .filter((s) => SPEAKER_KEYWORDS.test(s));
 
   if (!clauses.length) {
-    return { cs: "", pmOwner: "" };
+    return { cs: uniqueCsMention || "", pmOwner: uniquePmMention || "" };
   }
 
   const enriched = clauses.map((clause, i) => {
     const keyword = detectSpeakerKeyword(clause);
+    const clauseForCs = normalizeCsAliases(clause);
     return {
       clause,
       i,
       keyword,
       priority: keyword ? SPEAKER_KEYWORD_PRIORITY.indexOf(keyword) : 999,
       pmActor: findActorBeforeKeyword(clause, PM_OWNERS, keyword),
-      csActor: findActorBeforeKeyword(clause, CS_LIST, keyword),
+      csActor: findActorBeforeKeyword(clauseForCs, CS_LIST, keyword),
+      csTarget: findTargetAfterKeyword(clauseForCs, CS_LIST, keyword),
       pmAny: findFirstName(clause, PM_OWNERS),
-      csAny: findFirstName(clause, CS_LIST)
+      csAny: findFirstName(clauseForCs, CS_LIST)
     };
   });
 
   // Prefer actor-before-keyword matches; avoids picking referenced names like "involving Edison".
   const bestCs = pickBestClause(enriched, (x) => x.csActor);
+  const bestCsRequestTarget = pickBestClause(enriched, (x) =>
+    isRequestKeyword(x.keyword) ? x.csTarget : ""
+  );
   const bestPm = pickBestClause(enriched, (x) => x.pmActor);
+  const bestPmAny = pickBestClause(enriched, (x) => x.pmAny);
 
-  const cs = bestCs?.csActor || "";
-  const pmOwner = bestPm?.pmActor || "";
-
-  // Soft fallback: if PM actor exists but CS actor missing, allow CS from same clause.
-  if (pmOwner && !cs) {
-    const sameClause = enriched.find((x) => x.pmActor === pmOwner && x.csAny);
-    if (sameClause) return { cs: sameClause.csAny, pmOwner };
-  }
+  const cs = bestCs?.csActor || bestCsRequestTarget?.csTarget || uniqueCsMention || "";
+  const pmOwner = bestPm?.pmActor || bestPmAny?.pmAny || uniquePmMention || "";
 
   return { cs, pmOwner };
 }
 
 function findFirstName(text, names) {
-  const lc = String(text || "").toLowerCase();
+  const raw = String(text || "");
+  let best = "";
+  let bestPos = Number.POSITIVE_INFINITY;
   for (const name of names) {
-    if (lc.includes(name.toLowerCase())) return name;
+    const pos = findFirstNamePosition(raw, name);
+    if (pos >= 0 && pos < bestPos) {
+      best = name;
+      bestPos = pos;
+    }
   }
-  return "";
+  return best;
+}
+
+function findUniqueMentionedName(text, names) {
+  const raw = String(text || "");
+  const matches = names.filter((name) => makeNameRegex(name).test(raw));
+  return matches.length === 1 ? matches[0] : "";
 }
 
 function detectSpeakerKeyword(clause) {
@@ -682,17 +796,75 @@ function findActorBeforeKeyword(clause, names, keyword) {
 
   // Only consider the phrase before the action keyword (speaker side).
   const left = raw.slice(0, idx);
-  const leftLc = left.toLowerCase();
   let best = "";
   let bestPos = -1;
   for (const name of names) {
-    const pos = leftLc.lastIndexOf(name.toLowerCase());
+    const pos = findLastNamePosition(left, name);
     if (pos > bestPos) {
       best = name;
       bestPos = pos;
     }
   }
   return best;
+}
+
+function findTargetAfterKeyword(clause, names, keyword) {
+  const raw = String(clause || "");
+  if (!keyword) return "";
+  const lc = raw.toLowerCase();
+  const idx = lc.indexOf(keyword);
+  if (idx < 0) return "";
+
+  const right = raw.slice(idx + keyword.length);
+  let best = "";
+  let bestPos = Number.POSITIVE_INFINITY;
+
+  for (const name of names) {
+    const pos = findFirstNamePosition(right, name);
+    if (pos >= 0 && pos < bestPos) {
+      best = name;
+      bestPos = pos;
+    }
+  }
+  return best;
+}
+
+function isRequestKeyword(keyword) {
+  return /^request/.test(String(keyword || "").toLowerCase());
+}
+
+function normalizeCsAliases(input) {
+  let text = String(input || "");
+  for (const [pattern, canonical] of CS_NAME_ALIASES) {
+    text = text.replace(pattern, canonical);
+  }
+  return text;
+}
+
+function findFirstNamePosition(text, name) {
+  const re = makeNameRegex(name);
+  const m = re.exec(String(text || ""));
+  return m ? m.index : -1;
+}
+
+function findLastNamePosition(text, name) {
+  const re = makeNameRegex(name, "g");
+  let last = -1;
+  let m;
+  const s = String(text || "");
+  while ((m = re.exec(s))) {
+    last = m.index;
+  }
+  return last;
+}
+
+function makeNameRegex(name, flags = "i") {
+  const escaped = escapeRegExp(String(name || "").trim()).replace(/\\\s+/g, "\\s+");
+  return new RegExp(`\\b${escaped}\\b`, flags.includes("i") ? flags : `${flags}i`);
+}
+
+function escapeRegExp(input) {
+  return String(input || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function pickBestClause(rows, getValue) {
@@ -740,6 +912,8 @@ Rules:
 - If unsure issue type -> Question/Troubleshooting.
 - If unsure CS/PM owner -> "".
 - Keep the same indexes.
+- pmOwner is the PM who acknowledged the issue, committed to a fix, instructed the CS, advised, or owns the resolution — NOT the CS who reported it.
+- CS is the support person who raised/reported the issue on behalf of the client.
 
 Input:
 ${JSON.stringify(compact)}
@@ -824,7 +998,6 @@ async function resolveAccessToken(authClient) {
 
 export async function runSyncOnce(options = {}) {
   try {
-    const force = options?.force === true;
     const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
     if (!folderId) {
       return json(500, { ok: false, error: "Missing GOOGLE_DRIVE_FOLDER_ID" });
@@ -832,8 +1005,6 @@ export async function runSyncOnce(options = {}) {
 
     const drive = getDriveClient();
     const store = getDataStore();
-    const issues = await loadIssues(store);
-
     const files = await listDocsRecursively(drive, folderId);
     const candidates = files.filter((f) => matchesKeywords(f.name));
     if (!candidates.length) {
@@ -842,7 +1013,7 @@ export async function runSyncOnce(options = {}) {
 
     const latest = candidates[0];
     const fileKey = latest.id;
-    if (!force && (await isProcessed(store, fileKey))) {
+    if (await isProcessed(store, fileKey)) {
       return json(200, { ok: true, inserted: 0, message: "Latest file already processed." });
     }
 
@@ -856,8 +1027,9 @@ export async function runSyncOnce(options = {}) {
       });
     }
 
-    const dateIso = toIsoDate(latest.modifiedTime);
+    const dateIso = parseMeetingDateFromNotes(text) || toIsoDate(latest.modifiedTime);
     const rows = await extractRowsFromNotes(text, dateIso);
+    const issues = await loadIssues(store);
     const stamped = rows.map((row) => ({
       id: crypto.randomUUID(),
       sourceFileId: latest.id,
@@ -867,9 +1039,8 @@ export async function runSyncOnce(options = {}) {
       ...row
     }));
 
-    // Replace prior rows from the same source file to prevent stale/duplicate entries on force re-sync.
-    const remaining = issues.filter((row) => row.sourceFileId !== latest.id);
-    const merged = [...stamped, ...remaining].slice(0, 3000);
+    // Append new file rows only; preserve historical and manually edited rows.
+    const merged = [...stamped, ...issues].slice(0, 3000);
     await saveIssues(store, merged);
     await markProcessed(store, fileKey);
 

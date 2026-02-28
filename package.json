@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "netlify dev",
+    "dev:clean": "rm -rf .netlify/functions-serve && netlify dev",
+    "dev:auto": "sh -c 'while true; do rm -rf .netlify/functions-serve; netlify dev; echo \"[dev:auto] netlify dev exited, restarting in 2s...\"; sleep 2; done'",
+    "dev:watchdog": "sh -c 'while true; do rm -rf .netlify/functions-serve; netlify dev & pid=$!; fails=0; while kill -0 \"$pid\" 2>/dev/null; do code=$(curl -s -o /dev/null -w \"%{http_code}\" \"http://localhost:8888/.netlify/functions/list-issues\" || true); if [ \"$code\" = \"200\" ] || [ \"$code\" = \"401\" ] || [ \"$code\" = \"500\" ]; then fails=0; else fails=$((fails+1)); fi; if [ \"$fails\" -ge 3 ]; then echo \"[dev:watchdog] health check failed 3x, restarting...\"; kill \"$pid\" 2>/dev/null || true; wait \"$pid\" 2>/dev/null || true; break; fi; sleep 3; done; echo \"[dev:watchdog] netlify exited, restarting in 2s...\"; sleep 2; done'",
     "start": "netlify dev",
     "build": "echo \"No build step required\"",
     "deploy": "netlify deploy --prod"

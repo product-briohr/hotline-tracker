@@ -1,25 +1,57 @@
 import { explodeRowsByDescriptionBullets, getDataStore, json, loadIssues } from "./_lib.mjs";
 
+const CS_NAMES = [
+  "Adila",
+  "Arveena",
+  "Awana",
+  "Brandon",
+  "Diyana",
+  "Edison",
+  "Edrin",
+  "Elizabeth",
+  "Haslina",
+  "Ivan",
+  "Kai Chi",
+  "Lina",
+  "Nadirah",
+  "Nadzra",
+  "Rubini",
+  "Syakirah",
+  "Yana",
+  "Pavanjeet",
+  "Aqilah"
+];
+
+const CS_NAME_ALIASES = [
+  [/\bnoor\s+diyana\s+binti\s+kaseharom\b/gi, "Diyana"],
+  [/\bnur\s+diyana\s+binti\s+sajali\b/gi, "Yana"]
+];
+
 export default async (request) => {
   try {
     const url = new URL(request.url);
     const q = (url.searchParams.get("q") || "").toLowerCase().trim();
-    const moduleFilter = (url.searchParams.get("module") || "").trim();
-    const typeFilter = (url.searchParams.get("issueType") || "").trim();
-    const csFilter = (url.searchParams.get("cs") || "").trim();
-    const pmFilter = (url.searchParams.get("pmOwner") || "").trim();
+    const moduleFilter = readMultiFilter(url, "module");
+    const typeFilter = readMultiFilter(url, "issueType");
+    const csFilter = readMultiFilter(url, "cs");
+    const pmFilter = readMultiFilter(url, "pmOwner");
+    const dateFilter = readMultiFilter(url, "date");
     const dateFrom = (url.searchParams.get("dateFrom") || "").trim();
     const dateTo = (url.searchParams.get("dateTo") || "").trim();
+    const page = Math.max(1, Number(url.searchParams.get("page") || 1) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number(url.searchParams.get("pageSize") || 10) || 10));
 
     const store = getDataStore();
     const all = await loadIssues(store);
     const expanded = explodeRowsByDescriptionBullets(all);
 
     const filtered = expanded.filter((r) => {
-      if (moduleFilter && r.module !== moduleFilter) return false;
-      if (typeFilter && r.issueType !== typeFilter) return false;
-      if (csFilter && r.cs !== csFilter) return false;
-      if (pmFilter && r.pmOwner !== pmFilter) return false;
+      if (!mentionsAnyCsName(r.description)) return false;
+      if (moduleFilter.length && !hasAnySelectedValue(r.module, moduleFilter)) return false;
+      if (typeFilter.length && !hasAnySelectedValue(r.issueType, typeFilter)) return false;
+      if (csFilter.length && !hasAnySelectedValue(r.cs, csFilter)) return false;
+      if (pmFilter.length && !hasAnySelectedValue(r.pmOwner, pmFilter)) return false;
+      if (dateFilter.length && !dateFilter.includes(r.date || "")) return false;
       if (dateFrom && r.date < dateFrom) return false;
       if (dateTo && r.date > dateTo) return false;
       if (q) {
@@ -28,14 +60,72 @@ export default async (request) => {
       }
       return true;
     });
+    filtered.sort(compareRowsByLatestDate);
+    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    const safePage = Math.min(page, totalPages);
+    const start = (safePage - 1) * pageSize;
+    const rows = filtered.slice(start, start + pageSize);
 
     return json(200, {
       ok: true,
       total: expanded.length,
       count: filtered.length,
-      rows: filtered.slice(0, 1000)
+      pagination: {
+        page: safePage,
+        pageSize,
+        totalPages
+      },
+      rows
     });
   } catch (error) {
     return json(500, { ok: false, error: String(error?.message || error) });
   }
 };
+
+function readMultiFilter(url, key) {
+  const values = [];
+  for (const raw of url.searchParams.getAll(key)) {
+    for (const part of String(raw || "").split(",")) {
+      const value = part.trim();
+      if (value) values.push(value);
+    }
+  }
+  return Array.from(new Set(values));
+}
+
+function compareRowsByLatestDate(a, b) {
+  const dateCmp = String(b?.date || "").localeCompare(String(a?.date || ""));
+  if (dateCmp !== 0) return dateCmp;
+  return String(b?.createdAt || "").localeCompare(String(a?.createdAt || ""));
+}
+
+function mentionsAnyCsName(input) {
+  const text = normalizeCsAliases(String(input || ""));
+  return CS_NAMES.some((name) => makeNameRegex(name).test(text));
+}
+
+function normalizeCsAliases(input) {
+  let text = String(input || "");
+  for (const [pattern, canonical] of CS_NAME_ALIASES) {
+    text = text.replace(pattern, canonical);
+  }
+  return text;
+}
+
+function makeNameRegex(name) {
+  const escaped = escapeRegExp(String(name || "").trim()).replace(/\\\s+/g, "\\s+");
+  return new RegExp(`\\b${escaped}\\b`, "i");
+}
+
+function escapeRegExp(input) {
+  return String(input || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasAnySelectedValue(cellValue, selected) {
+  const values = String(cellValue || "")
+    .split(/\s*\|\s*|,\s*/)
+    .map((v) => v.trim())
+    .filter(Boolean);
+  if (!values.length) return false;
+  return selected.some((s) => values.includes(s));
+}

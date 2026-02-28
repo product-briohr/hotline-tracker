@@ -9,34 +9,18 @@
   <body>
     <main class="app-shell">
       <header class="topbar">
-        <div>
+        <div class="topbar-title">
           <h1>Product Hotline Tracker</h1>
           <p>Auto-synced from Gemini notes in Google Drive</p>
         </div>
         <div class="topbar-actions">
-          <input
-            id="syncToken"
-            type="password"
-            placeholder="Sync token (optional)"
-            autocomplete="off"
-          />
+          <input id="search" placeholder="Search description/comments..." />
+          <button id="themeToggle" class="btn" type="button" aria-label="Toggle theme">Dark mode</button>
           <button id="syncBtn" class="btn btn-primary">Sync Now</button>
         </div>
       </header>
 
-      <section class="filters">
-        <input id="search" placeholder="Search description/comments..." />
-        <input id="dateFrom" type="date" />
-        <input id="dateTo" type="date" />
-        <select id="moduleFilter"></select>
-        <select id="typeFilter"></select>
-        <select id="csFilter"></select>
-        <select id="pmFilter"></select>
-        <button id="clearBtn" class="btn">Clear</button>
-      </section>
-
       <section class="meta-row">
-        <span id="stats">Loading...</span>
         <span id="toast" class="toast"></span>
       </section>
 
@@ -44,6 +28,7 @@
         <table>
           <thead>
             <tr>
+              <th>#</th>
               <th>Date</th>
               <th>Module</th>
               <th>Issue Type</th>
@@ -51,11 +36,14 @@
               <th>PM Owner</th>
               <th>Issue / Question Description</th>
               <th>Comments</th>
-              <th>Actions</th>
             </tr>
           </thead>
           <tbody id="rows"></tbody>
         </table>
+      </section>
+
+      <section class="pager">
+        <div id="pageNumbers" class="page-numbers"></div>
       </section>
     </main>
 
