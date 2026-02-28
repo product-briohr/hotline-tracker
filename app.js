@@ -59,6 +59,7 @@ const els = {
   pmOwnerFilterMs: document.querySelector("#pmOwnerFilterMs"),
   tableFilters: document.querySelector(".table-filters"),
   newIssueBtn: document.querySelector("#newIssueBtn"),
+  refreshBtn: document.querySelector("#refreshBtn"),
   syncBtn: document.querySelector("#syncBtn"),
   themeToggle: document.querySelector("#themeToggle"),
   pageNumbers: document.querySelector("#pageNumbers"),
@@ -130,6 +131,7 @@ async function init() {
   els.tableFilters.addEventListener("click", onFilterClick);
   els.tableFilters.addEventListener("input", onFilterInput);
   els.newIssueBtn.addEventListener("click", openNewIssueModal);
+  els.refreshBtn.addEventListener("click", () => loadRows());
   els.syncBtn.addEventListener("click", runSync);
   els.themeToggle.addEventListener("click", toggleTheme);
   els.rows.addEventListener("click", onTableClick);
@@ -149,9 +151,6 @@ async function init() {
   document.addEventListener("keydown", onDocumentKeyDown);
 
   loadRows();
-  setInterval(() => {
-    if (!state.editingDescriptionId && !state.editingCommentId) loadRows();
-  }, 15000);
 }
 
 function goToPage(page) {
