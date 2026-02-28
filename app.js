@@ -109,7 +109,10 @@ const state = {
 
 init();
 
-function init() {
+async function init() {
+  if (typeof window.waitForHotlineAuth === "function") {
+    await window.waitForHotlineAuth();
+  }
   applySavedTheme();
   setNewIssueOptions();
   renderTableFilterMultiSelects();
