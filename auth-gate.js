@@ -1,6 +1,7 @@
 (function authGateInit() {
   const waiters = [];
   let gateVisible = false;
+  let gateEl = null;
 
   window.waitForHotlineAuth = async function waitForHotlineAuth() {
     await ensureAuthorized();
@@ -11,18 +12,20 @@
   void ensureAuthorized();
 
   async function ensureAuthorized() {
-    const session = await readSession();
-    if (!session.enabled || session.authenticated) return;
     lockPage();
+    const session = await readSession();
+    if (!session.enabled || session.authenticated) {
+      unlockPage();
+    }
   }
 
   function lockPage() {
     if (gateVisible) return;
     gateVisible = true;
     document.documentElement.classList.add("auth-locked");
-    const gate = document.createElement("div");
-    gate.className = "auth-gate";
-    gate.innerHTML = `<div class="auth-card">
+    gateEl = document.createElement("div");
+    gateEl.className = "auth-gate";
+    gateEl.innerHTML = `<div class="auth-card">
       <h2>Enter Password</h2>
       <p>This tracker is protected.</p>
       <form class="auth-form" autocomplete="on">
@@ -50,12 +53,12 @@
       </form>
       <div class="auth-error" id="authError"></div>
     </div>`;
-    document.body.appendChild(gate);
+    document.body.appendChild(gateEl);
 
-    const form = gate.querySelector(".auth-form");
-    const input = gate.querySelector("#authPasswordInput");
-    const error = gate.querySelector("#authError");
-    const toggleBtn = gate.querySelector("#authToggleVisible");
+    const form = gateEl.querySelector(".auth-form");
+    const input = gateEl.querySelector("#authPasswordInput");
+    const error = gateEl.querySelector("#authError");
+    const toggleBtn = gateEl.querySelector("#authToggleVisible");
     if (!(form instanceof HTMLFormElement) || !(input instanceof HTMLInputElement) || !(error instanceof HTMLElement)) {
       return;
     }
@@ -89,14 +92,21 @@
         input.select();
         return;
       }
-      gateVisible = false;
-      document.documentElement.classList.remove("auth-locked");
-      gate.remove();
-      while (waiters.length) {
-        const resolve = waiters.shift();
-        if (resolve) resolve();
-      }
+      unlockPage();
     });
+  }
+
+  function unlockPage() {
+    gateVisible = false;
+    document.documentElement.classList.remove("auth-locked");
+    if (gateEl) {
+      gateEl.remove();
+      gateEl = null;
+    }
+    while (waiters.length) {
+      const resolve = waiters.shift();
+      if (resolve) resolve();
+    }
   }
 
   async function submitPassword(password) {

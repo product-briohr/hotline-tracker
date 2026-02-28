@@ -221,6 +221,7 @@ function renderRow(row, idx) {
   const rowNumber = (state.page - 1) * state.pageSize + idx + 1;
   const isEditingDesc = state.editingDescriptionId === row.id;
   const isEditingComment = state.editingCommentId === row.id;
+  const shouldShowCsEditor = shouldShowCsField(row);
 
   const descriptionCell = isEditingDesc
     ? `<div class="cell-edit">
@@ -262,7 +263,7 @@ function renderRow(row, idx) {
     <td>${escapeHtml(formatDisplayDate(row.date))}</td>
     <td>${renderPillMultiSelect("module", MODULES, row.module, row.id)}</td>
     <td>${renderPillMultiSelect("issueType", ISSUE_TYPES, row.issueType, row.id, false)}</td>
-    <td>${renderPillMultiSelect("cs", CS_LIST, row.cs, row.id)}</td>
+    <td>${shouldShowCsEditor ? renderPillMultiSelect("cs", CS_LIST, row.cs, row.id) : ""}</td>
     <td>${renderPillMultiSelect("pmOwner", PM_OWNERS, row.pmOwner, row.id)}</td>
     <td>${descriptionCell}</td>
     <td>${commentsCell}</td>
@@ -270,6 +271,14 @@ function renderRow(row, idx) {
       row.id
     )}" title="Delete row">🗑</button></div></td>
   </tr>`;
+}
+
+function shouldShowCsField(row) {
+  const currentCs = String(row?.cs || "").trim();
+  if (currentCs) return true;
+  const description = String(row?.description || "").toLowerCase();
+  if (!description) return false;
+  return CS_LIST.some((name) => description.includes(String(name || "").toLowerCase()));
 }
 
 function renderRowSelect(field, values, current, id, isMulti = false) {
