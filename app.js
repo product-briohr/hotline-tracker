@@ -97,6 +97,9 @@ function init() {
   applySavedTheme();
   setNewIssueOptions();
   resetNewIssueForm();
+  if (!isLocalDevHost()) {
+    els.syncBtn.classList.add("hidden");
+  }
 
   els.search.addEventListener("input", debounce(() => goToPage(1), 220));
   els.newIssueBtn.addEventListener("click", openNewIssueModal);
@@ -137,7 +140,7 @@ async function safeJson(res) {
   }
 }
 
-async function loadRows() {
+async function loadRows(options = {}) {
   const qs = new URLSearchParams();
   if (els.search.value.trim()) qs.set("q", els.search.value.trim());
   qs.set("page", String(state.page));
@@ -160,11 +163,16 @@ async function loadRows() {
   if (state.page > state.totalPages) state.page = state.totalPages;
 
   renderPageNumbers();
-  els.toast.textContent = "";
+  if (!options.preserveToast) {
+    els.toast.textContent = "";
+  }
   renderTable();
   if (state.scrollToTableOnNextLoad) {
     const tableWrap = document.querySelector(".table-wrap");
-    if (tableWrap) tableWrap.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (tableWrap) {
+      const top = tableWrap.getBoundingClientRect().top + window.scrollY - 12;
+      window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+    }
     state.scrollToTableOnNextLoad = false;
   }
 }
@@ -260,6 +268,13 @@ function renderPillMultiSelect(field, values, current, id, isMulti = true) {
     })
     .join("");
 
+  const footer = isMulti
+    ? `<div class="ms-footer">
+        <button class="mini-btn" data-action="cancel-ms" type="button">Cancel</button>
+        <button class="mini-btn save" data-action="apply-ms" type="button">Apply</button>
+      </div>`
+    : "";
+
   return `<div class="ms" data-edit-field="${field}" data-id="${escapeHtml(id)}" data-multi="${
     isMulti ? "1" : "0"
   }" data-values="${escapeHtml(
@@ -272,6 +287,7 @@ function renderPillMultiSelect(field, values, current, id, isMulti = true) {
     <div class="ms-menu">
       <input class="ms-search" type="text" placeholder="Search..." />
       <div class="ms-options">${options}</div>
+      ${footer}
     </div>
   </div>`;
 }
@@ -329,8 +345,17 @@ async function onTableClick(event) {
     event.stopPropagation();
     const cell = btn.closest(".ms");
     if (!cell) return;
+    const isOpen = cell.classList.contains("open");
     for (const other of document.querySelectorAll(".ms.open")) {
-      if (other !== cell) other.classList.remove("open");
+      if (other !== cell) {
+        await maybeSavePendingRowMultiSelect(other);
+        other.classList.remove("open");
+      }
+    }
+    if (!isOpen) {
+      cell.dataset.original = cell.dataset.values || "";
+    } else {
+      await maybeSavePendingRowMultiSelect(cell);
     }
     cell.classList.toggle("open");
     return;
@@ -358,8 +383,38 @@ async function onTableClick(event) {
     }
     const merged = encodeMultiValue(Array.from(selected));
     cell.dataset.values = merged;
+    if (isMulti) {
+      refreshMultiSelectVisual(cell, field, parseMultiValue(merged));
+      return;
+    }
     await saveRowPatch(rowId, { ...base, [field]: merged });
-    if (!isMulti) cell.classList.remove("open");
+    cell.classList.remove("open");
+    return;
+  }
+
+  if (action === "cancel-ms") {
+    event.stopPropagation();
+    const cell = btn.closest(".ms");
+    if (!cell) return;
+    const field = cell.dataset.editField || "";
+    const original = cell.dataset.original || "";
+    cell.dataset.values = original;
+    refreshMultiSelectVisual(cell, field, parseMultiValue(original));
+    cell.classList.remove("open");
+    return;
+  }
+
+  if (action === "apply-ms") {
+    event.stopPropagation();
+    const cell = btn.closest(".ms");
+    if (!cell) return;
+    const field = cell.dataset.editField || "";
+    const rowId = cell.dataset.id || "";
+    const base = state.rowsById.get(rowId);
+    if (!field || !base) return;
+    const merged = cell.dataset.values || "";
+    await saveRowPatch(rowId, { ...base, [field]: merged });
+    cell.classList.remove("open");
     return;
   }
 
@@ -422,6 +477,9 @@ function onDocumentClick(event) {
   }
   if (event.target.closest(".ms")) return;
   for (const open of document.querySelectorAll(".ms.open")) {
+    if (open.dataset.context !== "modal") {
+      void maybeSavePendingRowMultiSelect(open);
+    }
     open.classList.remove("open");
   }
 }
@@ -477,7 +535,7 @@ function onModalClick(event) {
     }
     const merged = encodeMultiValue(Array.from(selected));
     cell.dataset.values = merged;
-    refreshModalMultiSelectVisual(cell, field, parseMultiValue(merged));
+    refreshMultiSelectVisual(cell, field, parseMultiValue(merged));
     if (!isMulti) cell.classList.remove("open");
   }
 }
@@ -546,7 +604,7 @@ async function saveRowPatch(id, fields) {
     }
     els.toast.style.color = "var(--success)";
     els.toast.textContent = "Row updated";
-    await loadRows();
+    await loadRows({ preserveToast: true });
   } catch (error) {
     els.toast.style.color = "var(--danger)";
     els.toast.textContent = String(error?.message || error);
@@ -606,7 +664,7 @@ async function runSync() {
     els.toast.style.color = "var(--success)";
     els.toast.textContent = data.message || "Sync completed";
     state.page = 1;
-    await loadRows();
+    await loadRows({ preserveToast: true });
   } catch (error) {
     els.toast.style.color = "var(--danger)";
     els.toast.textContent = String(error?.message || error);
@@ -688,7 +746,7 @@ async function onNewIssueSubmit(event) {
     state.page = 1;
     els.toast.style.color = "var(--success)";
     els.toast.textContent = "Issue created";
-    await loadRows();
+    await loadRows({ preserveToast: true });
   } catch (error) {
     els.toast.style.color = "var(--danger)";
     els.toast.textContent = String(error?.message || error);
@@ -722,7 +780,7 @@ async function onDeleteConfirmSubmit() {
     if (state.currentRows.length <= 1 && state.page > 1) state.page -= 1;
     els.toast.style.color = "var(--success)";
     els.toast.textContent = "Record deleted";
-    await loadRows();
+    await loadRows({ preserveToast: true });
   } catch (error) {
     els.toast.style.color = "var(--danger)";
     els.toast.textContent = String(error?.message || error);
@@ -814,6 +872,18 @@ function renderDescriptionText(input) {
   return `<strong>${escapeHtml(title)}</strong> ${renderRichText(rest)}`;
 }
 
+async function maybeSavePendingRowMultiSelect(cell) {
+  const field = cell.dataset.editField || "";
+  const rowId = cell.dataset.id || "";
+  const current = cell.dataset.values || "";
+  const original = cell.dataset.original || "";
+  if (!field || !rowId || current === original) return;
+  const base = state.rowsById.get(rowId);
+  if (!base) return;
+  await saveRowPatch(rowId, { ...base, [field]: current });
+  cell.dataset.original = current;
+}
+
 function parseMultiValue(input) {
   return String(input || "")
     .split(/\s*\|\s*|,\s*/)
@@ -872,7 +942,7 @@ function renderModalPillMultiSelect(field, values, selectedValues) {
   </div>`;
 }
 
-function refreshModalMultiSelectVisual(msCell, field, selectedValues) {
+function refreshMultiSelectVisual(msCell, field, selectedValues) {
   const chipsContainer = msCell.querySelector(".ms-chips");
   if (chipsContainer) {
     chipsContainer.innerHTML = selectedValues.length
@@ -901,4 +971,9 @@ function toIsoDateLocal(inputDate) {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+function isLocalDevHost() {
+  const host = String(location.hostname || "").toLowerCase();
+  return host === "localhost" || host === "127.0.0.1";
 }
