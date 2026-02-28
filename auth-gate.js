@@ -2,11 +2,10 @@
   const waiters = [];
   let gateVisible = false;
 
-  window.waitForHotlineAuth = function waitForHotlineAuth() {
-    if (!gateVisible) {
-      return ensureAuthorized().then(() => undefined);
-    }
-    return new Promise((resolve) => waiters.push(resolve));
+  window.waitForHotlineAuth = async function waitForHotlineAuth() {
+    await ensureAuthorized();
+    if (!gateVisible) return;
+    await new Promise((resolve) => waiters.push(resolve));
   };
 
   void ensureAuthorized();
