@@ -43,6 +43,7 @@ Optional:
 - `GEMINI_MODEL`
 - `SLACK_SYNC_WEBHOOK_URL` (optional; send scheduled sync pass/fail to Slack)
 - `SLACK_SYNC_APP_NAME` (optional; default: `Product Hotline Tracker`)
+- `APP_PUBLIC_URL` (optional; Slack button URL, defaults to site URL)
 
 ## 4) Google Drive access setup
 

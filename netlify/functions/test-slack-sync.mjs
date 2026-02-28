@@ -1,4 +1,4 @@
-import { json } from "./_lib.mjs";
+import { json, sendSlackSyncStatus } from "./_lib.mjs";
 
 export default async (request) => {
   try {
@@ -9,30 +9,19 @@ export default async (request) => {
     const authError = assertAdminAuth(request);
     if (authError) return authError;
 
-    const webhookUrl = String(process.env.SLACK_SYNC_WEBHOOK_URL || "").trim();
-    if (!webhookUrl) {
+    if (!String(process.env.SLACK_SYNC_WEBHOOK_URL || "").trim()) {
       return json(500, { ok: false, error: "Missing SLACK_SYNC_WEBHOOK_URL" });
     }
 
-    const appName = String(process.env.SLACK_SYNC_APP_NAME || "Product Hotline Tracker").trim();
     const nowIso = new Date().toISOString();
-    const text = [
-      ":test_tube: *Manual Slack test*",
-      `*App:* ${appName}`,
-      "*Trigger:* manual-test",
-      "*Status:* success",
-      `*Time:* ${nowIso}`
-    ].join("\n");
-
-    const res = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json; charset=utf-8" },
-      body: JSON.stringify({ text })
+    await sendSlackSyncStatus({
+      ok: true,
+      status: "success",
+      inserted: 0,
+      sourceFile: "Manual Slack preview",
+      message: "Preview of scheduled daily availability message format.",
+      trigger: "manual-test"
     });
-
-    if (!res.ok) {
-      return json(500, { ok: false, error: `Slack webhook failed with status ${res.status}` });
-    }
 
     return json(200, { ok: true, sentAt: nowIso });
   } catch (error) {

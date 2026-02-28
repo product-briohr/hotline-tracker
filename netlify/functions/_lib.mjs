@@ -1086,10 +1086,8 @@ async function resolveAccessToken(authClient) {
   return token;
 }
 
-async function sendSlackSyncStatus(payload) {
-  const webhookUrl = String(process.env.SLACK_SYNC_WEBHOOK_URL || "").trim();
-  if (!webhookUrl) return;
-
+function buildSlackWebhookBody(payload) {
+  const trackerUrl = String(process.env.APP_PUBLIC_URL || process.env.URL || "https://producthotline.netlify.app/").trim();
   const appName = String(process.env.SLACK_SYNC_APP_NAME || "Product Hotline Tracker").trim();
   const trigger = String(payload?.trigger || "scheduled").trim();
   const status = String(payload?.status || "unknown").trim();
@@ -1099,22 +1097,64 @@ async function sendSlackSyncStatus(payload) {
   const message = String(payload?.message || "").trim();
   const error = String(payload?.error || "").trim();
   const happenedAt = new Date().toISOString();
+  const headline = payload?.ok
+    ? "Daily Product Hotline Tracker is available."
+    : "Daily Product Hotline Tracker sync failed.";
 
-  const lines = [
-    `${statusEmoji} *${appName}* auto-sync ${payload?.ok ? "passed" : "failed"}`,
+  const detailLines = [
+    `${statusEmoji} *${appName}*`,
     `*Trigger:* ${trigger}`,
     `*Status:* ${status}`,
     `*Inserted:* ${inserted}`,
     `*Time:* ${happenedAt}`
   ];
-  if (sourceFile) lines.push(`*Source file:* ${sourceFile}`);
-  if (message) lines.push(`*Message:* ${message}`);
-  if (error) lines.push(`*Error:* ${error.slice(0, 500)}`);
+  if (sourceFile) detailLines.push(`*Source file:* ${sourceFile}`);
+  if (message) detailLines.push(`*Message:* ${message}`);
+  if (error) detailLines.push(`*Error:* ${error.slice(0, 500)}`);
+
+  return {
+    text: `${headline} ${trackerUrl}`,
+    blocks: [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*${headline}*`
+        }
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: detailLines.join("\n")
+        }
+      },
+      {
+        type: "actions",
+        elements: [
+          {
+            type: "button",
+            text: {
+              type: "plain_text",
+              text: "Open Product Hotline Tracker",
+              emoji: true
+            },
+            url: trackerUrl
+          }
+        ]
+      }
+    ]
+  };
+}
+
+export async function sendSlackSyncStatus(payload) {
+  const webhookUrl = String(process.env.SLACK_SYNC_WEBHOOK_URL || "").trim();
+  if (!webhookUrl) return;
 
   await fetch(webhookUrl, {
     method: "POST",
     headers: { "content-type": "application/json; charset=utf-8" },
-    body: JSON.stringify({ text: lines.join("\n") })
+    body: JSON.stringify(buildSlackWebhookBody(payload))
   });
 }
 
