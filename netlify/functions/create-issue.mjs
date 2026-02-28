@@ -29,7 +29,7 @@ export default async (request) => {
       ...row
     };
 
-    await saveIssues(store, [created, ...issues].slice(0, 3000));
+    await saveIssues(store, [created, ...issues]);
     return json(200, { ok: true, row: created });
   } catch (error) {
     return json(500, { ok: false, error: String(error?.message || error) });

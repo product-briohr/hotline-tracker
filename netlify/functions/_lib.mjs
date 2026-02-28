@@ -452,12 +452,93 @@ export function reclassifyRowByDescription(row, options = {}) {
   };
 }
 
-export async function loadIssues(store) {
-  return (await store.get("issues", { type: "json" })) || [];
+export async function loadIssues(store, options = {}) {
+  const dateFrom = String(options?.dateFrom || "").trim();
+  const dateTo = String(options?.dateTo || "").trim();
+  const partitions = await getIssuePartitions(store);
+  if (partitions.length) {
+    const selectedPartitions = filterPartitionsByDateRange(partitions, dateFrom, dateTo);
+    if (!selectedPartitions.length) return [];
+
+    const chunks = await Promise.all(
+      selectedPartitions.map(async (partition) => {
+        const rows = await store.get(issuePartitionKey(partition), { type: "json" });
+        return Array.isArray(rows) ? rows : [];
+      })
+    );
+    return chunks.flat();
+  }
+
+  // Backward-compatible fallback for legacy single-blob storage.
+  const legacy = await store.get("issues", { type: "json" });
+  return Array.isArray(legacy) ? legacy : [];
 }
 
 export async function saveIssues(store, rows) {
-  await store.setJSON("issues", rows);
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const grouped = groupRowsByPartition(safeRows);
+  const partitions = Object.keys(grouped).sort();
+
+  await Promise.all(
+    partitions.map(async (partition) => {
+      await store.setJSON(issuePartitionKey(partition), grouped[partition]);
+    })
+  );
+
+  await store.setJSON("issues:partitions", partitions);
+  // Prevent duplicate reads once partitioned storage is active.
+  await store.setJSON("issues", []);
+}
+
+function issuePartitionKey(partition) {
+  return `issues:${partition}`;
+}
+
+async function getIssuePartitions(store) {
+  const value = await store.get("issues:partitions", { type: "json" });
+  if (!Array.isArray(value)) return [];
+  return value.filter((v) => /^\d{4}-\d{2}$/.test(String(v || "")));
+}
+
+function groupRowsByPartition(rows) {
+  const grouped = {};
+  for (const row of rows) {
+    const partition = partitionFromRow(row);
+    if (!grouped[partition]) grouped[partition] = [];
+    grouped[partition].push(row);
+  }
+  return grouped;
+}
+
+function partitionFromRow(row) {
+  const date = String(row?.date || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return date.slice(0, 7);
+
+  const createdAt = String(row?.createdAt || "").trim();
+  const createdMs = Date.parse(createdAt);
+  if (Number.isFinite(createdMs)) {
+    return new Date(createdMs).toISOString().slice(0, 7);
+  }
+
+  return toIsoDate().slice(0, 7);
+}
+
+function filterPartitionsByDateRange(partitions, dateFrom, dateTo) {
+  const fromMonth = monthFromIsoDate(dateFrom);
+  const toMonth = monthFromIsoDate(dateTo);
+
+  if (!fromMonth && !toMonth) return partitions;
+  return partitions.filter((partition) => {
+    if (fromMonth && partition < fromMonth) return false;
+    if (toMonth && partition > toMonth) return false;
+    return true;
+  });
+}
+
+function monthFromIsoDate(value) {
+  const input = String(value || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input)) return "";
+  return input.slice(0, 7);
 }
 
 export async function isProcessed(store, fileId) {
@@ -1052,7 +1133,7 @@ export async function runSyncOnce(options = {}) {
     }));
 
     // Append new file rows only; preserve historical and manually edited rows.
-    const merged = [...stamped, ...issues].slice(0, 3000);
+    const merged = [...stamped, ...issues];
     await saveIssues(store, merged);
     await markProcessed(store, fileKey);
     await markAutoSyncSuccess(store);

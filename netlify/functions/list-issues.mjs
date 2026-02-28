@@ -21,7 +21,7 @@ export default async (request) => {
     const pageSize = Math.min(100, Math.max(1, Number(url.searchParams.get("pageSize") || 10) || 10));
 
     const store = getDataStore();
-    const all = await loadIssues(store);
+    const all = await loadIssues(store, { dateFrom, dateTo });
     const expanded = explodeRowsByDescriptionBullets(all);
     const lastEditedAt = getLatestUpdatedAt(expanded);
     const lastAutoSyncAt = await getLastAutoSyncAt(store);
