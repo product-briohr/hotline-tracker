@@ -1171,48 +1171,67 @@ export async function runSyncOnce(options = {}) {
       await markAutoSyncSuccess(store);
       return makeSyncResponse(200, { ok: true, inserted: 0, message: "No matching notes file found." }, { notifySlack, trigger, syncedAt });
     }
-
-    const latest = candidates[0];
-    const fileKey = latest.id;
-    if (await isProcessed(store, fileKey)) {
-      await markAutoSyncSuccess(store);
-      return makeSyncResponse(200, { ok: true, inserted: 0, message: "Latest file already processed." }, { notifySlack, trigger, syncedAt });
-    }
-
-    const text = await exportDocText(drive, latest.id);
-    if (!text || text.trim().length < 80) {
-      await markProcessed(store, fileKey);
-      await markAutoSyncSuccess(store);
-      return makeSyncResponse(200, {
-        ok: true,
-        inserted: 0,
-        message: "Skipped file because notes were too short."
-      }, { notifySlack, trigger, syncedAt });
-    }
-
-    const dateIso = parseMeetingDateFromNotes(text) || toIsoDate(latest.modifiedTime);
-    const rows = await extractRowsFromNotes(text, dateIso);
     const issues = await loadIssues(store);
-    const stamped = rows.map((row) => ({
-      id: randomUUID(),
-      sourceFileId: latest.id,
-      sourceFileName: latest.name,
-      sourceFileLink: latest.webViewLink || "",
-      createdAt: new Date().toISOString(),
-      ...row
-    }));
+    const stamped = [];
+    const processedFiles = [];
+    let skippedShortFiles = 0;
 
-    // Append new file rows only; preserve historical and manually edited rows.
-    const merged = [...stamped, ...issues];
-    await saveIssues(store, merged);
-    await markProcessed(store, fileKey);
+    for (const file of candidates) {
+      const fileKey = file.id;
+      if (await isProcessed(store, fileKey)) continue;
+
+      const text = await exportDocText(drive, file.id);
+      if (!text || text.trim().length < 80) {
+        await markProcessed(store, fileKey);
+        skippedShortFiles += 1;
+        continue;
+      }
+
+      const dateIso = parseMeetingDateFromNotes(text) || toIsoDate(file.modifiedTime);
+      const rows = await extractRowsFromNotes(text, dateIso);
+      const nowIso = new Date().toISOString();
+      stamped.push(
+        ...rows.map((row) => ({
+          id: randomUUID(),
+          sourceFileId: file.id,
+          sourceFileName: file.name,
+          sourceFileLink: file.webViewLink || "",
+          createdAt: nowIso,
+          ...row
+        }))
+      );
+
+      await markProcessed(store, fileKey);
+      processedFiles.push(file.name);
+    }
+
+    if (stamped.length) {
+      // Append new file rows only; preserve historical and manually edited rows.
+      const merged = [...stamped, ...issues];
+      await saveIssues(store, merged);
+    }
+
     await markAutoSyncSuccess(store);
 
-    return makeSyncResponse(200, {
-      ok: true,
-      inserted: stamped.length,
-      sourceFile: latest.name
-    }, { notifySlack, trigger, syncedAt });
+    if (!processedFiles.length) {
+      return makeSyncResponse(
+        200,
+        { ok: true, inserted: 0, message: "All matching notes are already processed." },
+        { notifySlack, trigger, syncedAt }
+      );
+    }
+
+    const suffix = skippedShortFiles ? ` (${skippedShortFiles} short files skipped)` : "";
+    return makeSyncResponse(
+      200,
+      {
+        ok: true,
+        inserted: stamped.length,
+        sourceFile: processedFiles[0],
+        message: `Processed ${processedFiles.length} file(s)${suffix}.`
+      },
+      { notifySlack, trigger, syncedAt }
+    );
   } catch (error) {
     return makeSyncResponse(500, { ok: false, error: String(error?.message || error) }, { notifySlack, trigger, syncedAt });
   }
