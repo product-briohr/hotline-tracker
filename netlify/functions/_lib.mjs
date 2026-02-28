@@ -1089,7 +1089,10 @@ async function resolveAccessToken(authClient) {
 function buildSlackWebhookBody(payload) {
   const trackerUrl = String(process.env.APP_PUBLIC_URL || process.env.URL || "https://producthotline.netlify.app/").trim();
   const syncedAt = String(payload?.syncedAt || new Date().toISOString());
-  const headline = `Product Hotline Tracker is available for ${formatDateWithOrdinal(syncedAt)}`;
+  const isOk = payload?.ok === true;
+  const headline = isOk
+    ? `Product Hotline Tracker is available for ${formatDateWithOrdinal(syncedAt)}`
+    : `Product Hotline Tracker is failed for ${formatDateWithOrdinal(syncedAt)}`;
 
   return {
     text: `${headline} ${trackerUrl}`,
@@ -1133,12 +1136,12 @@ export async function sendSlackSyncStatus(payload) {
 async function makeSyncResponse(statusCode, body, options = {}) {
   const shouldNotifySlack =
     options?.notifySlack === true &&
-    body?.ok === true &&
-    String(body?.sourceFile || "").trim().length > 0;
+    ((body?.ok === true && String(body?.sourceFile || "").trim().length > 0) || body?.ok === false);
 
   if (shouldNotifySlack) {
     try {
       await sendSlackSyncStatus({
+        ok: body?.ok === true,
         syncedAt: options?.syncedAt || new Date().toISOString(),
         sourceFile: body?.sourceFile || "",
         trigger: options?.trigger || "scheduled"
