@@ -32,3 +32,8 @@
   from = "/api/issues/reclassify"
   to = "/.netlify/functions/reclassify-issues"
   status = 200
+
+[[redirects]]
+  from = "/api/sync/test-slack"
+  to = "/.netlify/functions/test-slack-sync"
+  status = 200
