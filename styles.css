@@ -755,6 +755,10 @@ td:nth-child(9) {
 }
 
 @media (max-width: 1200px) {
+  .app-shell {
+    padding: 20px 14px 28px;
+  }
+
   .topbar {
     align-items: flex-start;
     flex-direction: column;
@@ -762,13 +766,163 @@ td:nth-child(9) {
 
   .topbar-actions {
     justify-content: flex-start;
+    width: 100%;
   }
 
   input {
     min-width: 220px;
   }
 
+  .meta-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .meta-note {
+    margin-left: 0;
+    text-align: left;
+    width: 100%;
+  }
+
+  .table-filters {
+    min-width: 0;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .f-search,
+  .clear-filters-text {
+    grid-column: 1 / -1;
+  }
+
+  .clear-filters-text {
+    justify-self: start;
+  }
+
   .modal-form {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .topbar-title h1 {
+    font-size: 24px;
+  }
+
+  .topbar-actions .btn {
+    min-height: 40px;
+  }
+
+  .table-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .table-wrap {
+    border-radius: 12px;
+  }
+
+  table {
+    min-width: 920px;
+  }
+
+  th,
+  td {
+    padding: 9px 10px;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell {
+    padding: 14px 10px 22px;
+  }
+
+  input {
+    min-width: 0;
+  }
+
+  .topbar-title h1 {
+    font-size: 22px;
+  }
+
+  .topbar-title p {
+    font-size: 13px;
+  }
+
+  .topbar-actions {
+    gap: 6px;
+  }
+
+  .topbar-actions .btn {
+    flex: 1 1 auto;
+    text-align: center;
+    padding: 10px 12px;
+  }
+
+  .theme-switch {
+    width: 68px;
+    height: 36px;
+    flex: 0 0 auto;
+  }
+
+  .theme-knob {
+    width: 28px;
+    height: 28px;
+  }
+
+  .theme-switch[aria-pressed="true"] .theme-knob {
+    transform: translateX(31px);
+  }
+
+  .table-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .table-filters label,
+  .f-search,
+  .clear-filters-text {
+    grid-column: auto;
+  }
+
+  .clear-filters-text {
+    justify-self: start;
+  }
+
+  .table-filters .ms-menu {
+    width: min(280px, calc(100vw - 30px));
+  }
+
+  table {
+    min-width: 760px;
+  }
+
+  .desc-cell {
+    font-size: 12px;
+  }
+
+  .comment-cell {
+    font-size: 13px;
+  }
+
+  .modal {
+    padding: 8px;
+  }
+
+  .modal-card {
+    width: 100%;
+    max-height: 94vh;
+    border-radius: 12px;
+    padding: 10px;
+  }
+
+  .modal-head h2 {
+    font-size: 18px;
+  }
+
+  .modal-actions {
+    justify-content: stretch;
+  }
+
+  .modal-actions .btn {
+    flex: 1 1 auto;
   }
 }
