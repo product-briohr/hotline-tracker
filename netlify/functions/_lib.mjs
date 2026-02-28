@@ -1088,29 +1088,8 @@ async function resolveAccessToken(authClient) {
 
 function buildSlackWebhookBody(payload) {
   const trackerUrl = String(process.env.APP_PUBLIC_URL || process.env.URL || "https://producthotline.netlify.app/").trim();
-  const appName = String(process.env.SLACK_SYNC_APP_NAME || "Product Hotline Tracker").trim();
-  const trigger = String(payload?.trigger || "scheduled").trim();
-  const status = String(payload?.status || "unknown").trim();
-  const statusEmoji = payload?.ok ? ":white_check_mark:" : ":x:";
-  const inserted = Number(payload?.inserted || 0);
-  const sourceFile = String(payload?.sourceFile || "").trim();
-  const message = String(payload?.message || "").trim();
-  const error = String(payload?.error || "").trim();
-  const happenedAt = new Date().toISOString();
-  const headline = payload?.ok
-    ? "Daily Product Hotline Tracker is available."
-    : "Daily Product Hotline Tracker sync failed.";
-
-  const detailLines = [
-    `${statusEmoji} *${appName}*`,
-    `*Trigger:* ${trigger}`,
-    `*Status:* ${status}`,
-    `*Inserted:* ${inserted}`,
-    `*Time:* ${happenedAt}`
-  ];
-  if (sourceFile) detailLines.push(`*Source file:* ${sourceFile}`);
-  if (message) detailLines.push(`*Message:* ${message}`);
-  if (error) detailLines.push(`*Error:* ${error.slice(0, 500)}`);
+  const syncedAt = String(payload?.syncedAt || new Date().toISOString());
+  const headline = `Product Hotline Tracker is available for ${formatDateWithOrdinal(syncedAt)}`;
 
   return {
     text: `${headline} ${trackerUrl}`,
@@ -1120,13 +1099,6 @@ function buildSlackWebhookBody(payload) {
         text: {
           type: "mrkdwn",
           text: `*${headline}*`
-        }
-      },
-      {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: detailLines.join("\n")
         }
       },
       {
@@ -1159,15 +1131,16 @@ export async function sendSlackSyncStatus(payload) {
 }
 
 async function makeSyncResponse(statusCode, body, options = {}) {
-  if (options?.notifySlack) {
+  const shouldNotifySlack =
+    options?.notifySlack === true &&
+    body?.ok === true &&
+    String(body?.sourceFile || "").trim().length > 0;
+
+  if (shouldNotifySlack) {
     try {
       await sendSlackSyncStatus({
-        ok: body?.ok === true,
-        status: body?.ok === true ? "success" : "failed",
-        inserted: body?.inserted || 0,
+        syncedAt: options?.syncedAt || new Date().toISOString(),
         sourceFile: body?.sourceFile || "",
-        message: body?.message || "",
-        error: body?.error || "",
         trigger: options?.trigger || "scheduled"
       });
     } catch {
@@ -1180,10 +1153,11 @@ async function makeSyncResponse(statusCode, body, options = {}) {
 export async function runSyncOnce(options = {}) {
   const notifySlack = options?.notifySlack === true;
   const trigger = String(options?.trigger || "manual").trim();
+  const syncedAt = new Date().toISOString();
   try {
     const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
     if (!folderId) {
-      return makeSyncResponse(500, { ok: false, error: "Missing GOOGLE_DRIVE_FOLDER_ID" }, { notifySlack, trigger });
+      return makeSyncResponse(500, { ok: false, error: "Missing GOOGLE_DRIVE_FOLDER_ID" }, { notifySlack, trigger, syncedAt });
     }
 
     const drive = getDriveClient();
@@ -1192,14 +1166,14 @@ export async function runSyncOnce(options = {}) {
     const candidates = files.filter((f) => matchesKeywords(f.name));
     if (!candidates.length) {
       await markAutoSyncSuccess(store);
-      return makeSyncResponse(200, { ok: true, inserted: 0, message: "No matching notes file found." }, { notifySlack, trigger });
+      return makeSyncResponse(200, { ok: true, inserted: 0, message: "No matching notes file found." }, { notifySlack, trigger, syncedAt });
     }
 
     const latest = candidates[0];
     const fileKey = latest.id;
     if (await isProcessed(store, fileKey)) {
       await markAutoSyncSuccess(store);
-      return makeSyncResponse(200, { ok: true, inserted: 0, message: "Latest file already processed." }, { notifySlack, trigger });
+      return makeSyncResponse(200, { ok: true, inserted: 0, message: "Latest file already processed." }, { notifySlack, trigger, syncedAt });
     }
 
     const text = await exportDocText(drive, latest.id);
@@ -1210,7 +1184,7 @@ export async function runSyncOnce(options = {}) {
         ok: true,
         inserted: 0,
         message: "Skipped file because notes were too short."
-      }, { notifySlack, trigger });
+      }, { notifySlack, trigger, syncedAt });
     }
 
     const dateIso = parseMeetingDateFromNotes(text) || toIsoDate(latest.modifiedTime);
@@ -1235,8 +1209,25 @@ export async function runSyncOnce(options = {}) {
       ok: true,
       inserted: stamped.length,
       sourceFile: latest.name
-    }, { notifySlack, trigger });
+    }, { notifySlack, trigger, syncedAt });
   } catch (error) {
-    return makeSyncResponse(500, { ok: false, error: String(error?.message || error) }, { notifySlack, trigger });
+    return makeSyncResponse(500, { ok: false, error: String(error?.message || error) }, { notifySlack, trigger, syncedAt });
   }
+}
+
+function formatDateWithOrdinal(isoDateTime) {
+  const d = new Date(isoDateTime || Date.now());
+  const day = d.getUTCDate();
+  const suffix = getOrdinalSuffix(day);
+  const month = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+  const year = d.getUTCFullYear();
+  return `${day}${suffix} ${month} ${year}`;
+}
+
+function getOrdinalSuffix(day) {
+  if (day % 100 >= 11 && day % 100 <= 13) return "th";
+  if (day % 10 === 1) return "st";
+  if (day % 10 === 2) return "nd";
+  if (day % 10 === 3) return "rd";
+  return "th";
 }

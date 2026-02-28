@@ -16,11 +16,8 @@ export default async (request) => {
     const nowIso = new Date().toISOString();
     await sendSlackSyncStatus({
       ok: true,
-      status: "success",
-      inserted: 0,
       sourceFile: "Manual Slack preview",
-      message: "Preview of scheduled daily availability message format.",
-      trigger: "manual-test"
+      syncedAt: new Date().toISOString()
     });
 
     return json(200, { ok: true, sentAt: nowIso });
