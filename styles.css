@@ -598,11 +598,9 @@ td:nth-child(9) {
 }
 
 .pager {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  margin-top: 12px;
+  display: grid;
+  gap: 16px;
+  margin-top: 14px;
 }
 
 .hidden {
@@ -681,17 +679,20 @@ td:nth-child(9) {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .page-btn {
   cursor: pointer;
-  min-width: 36px;
-  padding: 6px 10px;
+  min-width: 42px;
+  height: 42px;
+  padding: 0 8px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--panel);
   color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .page-btn.active {
@@ -701,7 +702,60 @@ td:nth-child(9) {
 }
 
 .page-btn.nav {
-  min-width: 58px;
+  min-width: 54px;
+}
+
+.page-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.page-ellipsis {
+  min-width: 42px;
+  height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: inline-grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  background: var(--panel);
+}
+
+.pager-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Hide results summary + page-size selector per request */
+.pager-meta {
+  display: none;
+}
+
+.page-summary {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.page-size-wrap {
+  display: inline-flex;
+  align-items: center;
+}
+
+.page-size-select {
+  min-width: 120px;
+  height: 54px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  padding: 0 42px 0 18px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--panel);
 }
 
 .app-footer {
@@ -829,6 +883,24 @@ td:nth-child(9) {
   td {
     padding: 9px 10px;
   }
+
+  .page-btn,
+  .page-ellipsis {
+    min-width: 46px;
+    height: 46px;
+    border-radius: 14px;
+    font-size: 15px;
+  }
+
+  .page-summary {
+    font-size: 16px;
+  }
+
+  .page-size-select {
+    min-width: 104px;
+    height: 46px;
+    font-size: 16px;
+  }
 }
 
 @media (max-width: 640px) {
@@ -889,6 +961,24 @@ td:nth-child(9) {
 
   .table-filters .ms-menu {
     width: min(280px, calc(100vw - 30px));
+  }
+
+  .page-numbers {
+    justify-content: center;
+  }
+
+  .pager-meta {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .page-summary {
+    font-size: 15px;
+    text-align: left;
+  }
+
+  .page-size-wrap {
+    align-self: flex-end;
   }
 
   table {

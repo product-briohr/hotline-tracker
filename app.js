@@ -46,8 +46,7 @@ const CS_LIST = [
   "Aqilah"
 ];
 const PM_OWNERS = ["Amir", "Idris Ashari", "Nita Puspita", "Nico"];
-const PAGE_SIZE = 10;
-const PAGE_WINDOW_SIZE = 10;
+const DEFAULT_PAGE_SIZE = 10;
 const THEME_KEY = "hotline-theme";
 
 const els = {
@@ -63,6 +62,8 @@ const els = {
   syncBtn: document.querySelector("#syncBtn"),
   themeToggle: document.querySelector("#themeToggle"),
   pageNumbers: document.querySelector("#pageNumbers"),
+  pageSummary: document.querySelector("#pageSummary"),
+  pageSizeSelect: document.querySelector("#pageSizeSelect"),
   lastUpdated: document.querySelector("#lastUpdated"),
   toast: document.querySelector("#toast"),
   rows: document.querySelector("#rows"),
@@ -87,6 +88,7 @@ const els = {
 
 const state = {
   page: 1,
+  pageSize: DEFAULT_PAGE_SIZE,
   totalPages: 1,
   totalCount: 0,
   scrollToTableOnNextLoad: false,
@@ -130,6 +132,7 @@ function init() {
   els.newIssueModal.addEventListener("click", onModalClick);
   els.newIssueModal.addEventListener("input", onModalInput);
   els.pageNumbers.addEventListener("click", onPageNumbersClick);
+  els.pageSizeSelect.addEventListener("change", onPageSizeChange);
   els.newIssueClose.addEventListener("click", closeNewIssueModal);
   els.newIssueCancel.addEventListener("click", closeNewIssueModal);
   els.newIssueForm.addEventListener("submit", onNewIssueSubmit);
@@ -168,7 +171,7 @@ async function loadRows(options = {}) {
   for (const v of state.filterValues.cs) qs.append("cs", v);
   for (const v of state.filterValues.pmOwner) qs.append("pmOwner", v);
   qs.set("page", String(state.page));
-  qs.set("pageSize", String(PAGE_SIZE));
+  qs.set("pageSize", String(state.pageSize));
 
   const res = await fetch(`/api/issues?${qs.toString()}`);
   const data = await safeJson(res);
@@ -183,6 +186,10 @@ async function loadRows(options = {}) {
   state.rowsById = new Map(rows.map((row) => [row.id, row]));
   state.totalPages = Math.max(1, Number(data?.pagination?.totalPages || 1));
   state.totalCount = Number(data?.count || 0);
+  state.pageSize = Math.max(1, Number(data?.pagination?.pageSize || state.pageSize || DEFAULT_PAGE_SIZE));
+  if (els.pageSizeSelect.value !== String(state.pageSize)) {
+    els.pageSizeSelect.value = String(state.pageSize);
+  }
   els.lastUpdated.textContent = `Last auto sync: ${formatLastUpdated(data?.lastAutoSyncAt)}`;
   state.page = Math.min(Math.max(1, Number(data?.pagination?.page || state.page)), state.totalPages);
   if (state.page > state.totalPages) state.page = state.totalPages;
@@ -208,7 +215,7 @@ function renderTable() {
 }
 
 function renderRow(row, idx) {
-  const rowNumber = (state.page - 1) * PAGE_SIZE + idx + 1;
+  const rowNumber = (state.page - 1) * state.pageSize + idx + 1;
   const isEditingDesc = state.editingDescriptionId === row.id;
   const isEditingComment = state.editingCommentId === row.id;
 
@@ -641,38 +648,99 @@ async function saveRowPatch(id, fields) {
 
 function renderPageNumbers() {
   const buttons = [];
-  const windowStart = Math.floor((state.page - 1) / PAGE_WINDOW_SIZE) * PAGE_WINDOW_SIZE + 1;
-  const windowEnd = Math.min(state.totalPages, windowStart + PAGE_WINDOW_SIZE - 1);
+  const current = state.page;
+  const total = state.totalPages;
+  const items = buildCompactPageItems(current, total);
 
-  if (windowStart > 1) {
-    buttons.push(
-      `<button class="page-btn nav" data-page="${windowStart - 1}" type="button">Prev</button>`
-    );
+  const prevDisabled = current <= 1 ? "disabled" : "";
+  const prevPage = Math.max(1, current - 1);
+  buttons.push(
+    `<button class="page-btn nav" data-page="${prevPage}" type="button" aria-label="Previous page" ${prevDisabled}>‹</button>`
+  );
+
+  for (const item of items) {
+    if (item === "...") {
+      buttons.push(`<span class="page-ellipsis">…</span>`);
+      continue;
+    }
+    const active = item === current ? "active" : "";
+    buttons.push(`<button class="page-btn ${active}" data-page="${item}" type="button">${item}</button>`);
   }
 
-  for (let p = windowStart; p <= windowEnd; p += 1) {
-    const active = p === state.page ? "active" : "";
-    buttons.push(
-      `<button class="page-btn ${active}" data-page="${p}" type="button">${p}</button>`
-    );
-  }
+  const nextDisabled = current >= total ? "disabled" : "";
+  const nextPage = Math.min(total, current + 1);
+  buttons.push(
+    `<button class="page-btn nav" data-page="${nextPage}" type="button" aria-label="Next page" ${nextDisabled}>›</button>`
+  );
 
-  if (windowEnd < state.totalPages) {
-    buttons.push(
-      `<button class="page-btn nav" data-page="${windowEnd + 1}" type="button">Next</button>`
-    );
-  }
   els.pageNumbers.innerHTML = buttons.join("");
+  renderPageSummary();
 }
 
 function onPageNumbersClick(event) {
   const btn = event.target.closest("button[data-page]");
-  if (!btn) return;
+  if (!btn || btn.disabled) return;
   const p = Number(btn.dataset.page || 1);
   if (p >= 1 && p <= state.totalPages && p !== state.page) {
     state.scrollToTableOnNextLoad = true;
     goToPage(p);
   }
+}
+
+function onPageSizeChange() {
+  const nextSize = Math.max(1, Number(els.pageSizeSelect.value || DEFAULT_PAGE_SIZE));
+  if (nextSize === state.pageSize) return;
+  state.pageSize = nextSize;
+  state.page = 1;
+  loadRows();
+}
+
+function renderPageSummary() {
+  if (!els.pageSummary) return;
+  if (!state.totalCount) {
+    els.pageSummary.textContent = "Results: 0 - 0 of 0";
+    return;
+  }
+  const start = (state.page - 1) * state.pageSize + 1;
+  const end = Math.min(state.totalCount, state.page * state.pageSize);
+  els.pageSummary.textContent = `Results: ${start} - ${end} of ${state.totalCount}`;
+}
+
+function buildCompactPageItems(current, total) {
+  if (total <= 1) return [1];
+  if (total <= 7) return range(1, total);
+
+  let start = 2;
+  let end = total - 1;
+  if (current <= 2) {
+    start = 2;
+    end = 3;
+  } else if (current === 3) {
+    start = 2;
+    end = 4;
+  } else if (current >= total - 1) {
+    start = total - 2;
+    end = total - 1;
+  } else if (current === total - 2) {
+    start = total - 3;
+    end = total - 1;
+  } else {
+    start = current - 1;
+    end = current + 1;
+  }
+
+  const out = [1];
+  if (start > 2) out.push("...");
+  for (let p = start; p <= end; p += 1) out.push(p);
+  if (end < total - 1) out.push("...");
+  out.push(total);
+  return out;
+}
+
+function range(from, to) {
+  const out = [];
+  for (let i = from; i <= to; i += 1) out.push(i);
+  return out;
 }
 
 async function runSync() {
