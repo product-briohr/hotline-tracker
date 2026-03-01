@@ -137,7 +137,7 @@ export function json(statusCode, body) {
 }
 
 const AUTH_COOKIE_NAME = "hotline_auth";
-const AUTH_SESSION_MS = 1000 * 60 * 60 * 12;
+const AUTH_SESSION_MS = 1000 * 60 * 60 * 24 * 365;
 
 export function assertPasswordGate(request) {
   const appPassword = String(process.env.APP_PASSWORD || "").trim();
@@ -149,12 +149,20 @@ export function assertPasswordGate(request) {
   return null;
 }
 
-export function createPasswordGateSessionCookie() {
+export function createPasswordGateSessionCookie(request) {
   const token = signAuthToken({
     exp: Date.now() + AUTH_SESSION_MS
   });
   const maxAgeSec = Math.floor(AUTH_SESSION_MS / 1000);
-  return `${AUTH_COOKIE_NAME}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAgeSec}`;
+  const isSecure = isHttpsRequest(request);
+  const securePart = isSecure ? "; Secure" : "";
+  return `${AUTH_COOKIE_NAME}=${token}; Path=/; HttpOnly${securePart}; SameSite=Lax; Max-Age=${maxAgeSec}`;
+}
+
+function isHttpsRequest(request) {
+  const url = request?.url || "";
+  const proto = String(request?.headers?.get("x-forwarded-proto") || "").toLowerCase();
+  return proto === "https" || url.startsWith("https:");
 }
 
 export function clearPasswordGateSessionCookie() {

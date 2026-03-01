@@ -22,7 +22,7 @@ export default async (request) => {
     }
 
     const res = json(200, { ok: true, enabled: true });
-    res.headers.set("set-cookie", createPasswordGateSessionCookie());
+    res.headers.set("set-cookie", createPasswordGateSessionCookie(request));
     return res;
   } catch (error) {
     return json(500, { ok: false, error: String(error?.message || error) });
