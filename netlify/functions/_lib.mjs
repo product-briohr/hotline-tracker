@@ -1254,6 +1254,7 @@ async function makeSyncResponse(statusCode, body, options = {}) {
 export async function runSyncOnce(options = {}) {
   const notifySlack = options?.notifySlack === true;
   const trigger = String(options?.trigger || "manual").trim();
+  const force = options?.force === true;
   const syncedAt = new Date().toISOString();
   try {
     const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
@@ -1269,14 +1270,14 @@ export async function runSyncOnce(options = {}) {
       await markAutoSyncSuccess(store);
       return makeSyncResponse(200, { ok: true, inserted: 0, message: "No matching notes file found." }, { notifySlack, trigger, syncedAt });
     }
-    const issues = await loadIssues(store);
+    let issues = await loadIssues(store);
     const stamped = [];
     const processedFiles = [];
     let skippedShortFiles = 0;
 
     for (const file of candidates) {
       const fileKey = file.id;
-      if (await isProcessed(store, fileKey)) continue;
+      if (!force && (await isProcessed(store, fileKey))) continue;
 
       const text = await exportDocText(drive, file.id);
       if (!text || text.trim().length < 80) {
@@ -1301,6 +1302,9 @@ export async function runSyncOnce(options = {}) {
 
       await markProcessed(store, fileKey);
       processedFiles.push(file.name);
+      if (force) {
+        issues = issues.filter((r) => r.sourceFileId !== file.id);
+      }
     }
 
     if (stamped.length) {

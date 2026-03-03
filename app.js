@@ -762,7 +762,7 @@ async function runSync() {
   els.toast.textContent = "";
 
   try {
-    const res = await fetch("/api/sync", { method: "POST" });
+    const res = await fetch("/api/sync?force=true", { method: "POST" });
     const data = await safeJson(res);
     if (!data.ok) {
       els.toast.style.color = "var(--danger)";
