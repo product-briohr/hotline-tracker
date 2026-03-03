@@ -27,10 +27,19 @@
 
       <section class="admin-content">
         <div class="admin-card">
-          <h2>Sync</h2>
-          <p>Pull the latest data from Google Drive meeting notes.</p>
-          <button id="syncBtn" class="btn btn-primary" type="button">Sync Now</button>
-          <span id="toast" class="toast admin-toast"></span>
+          <div class="admin-card-head">
+            <h2>Manual Sync</h2>
+            <p>Pull latest issue rows from Product Hotline Google Drive notes.</p>
+          </div>
+          <div class="admin-sync-meta" id="syncMeta">
+            <span class="admin-meta-label">Last auto sync</span>
+            <span class="admin-meta-value" id="lastSyncAt">-</span>
+          </div>
+          <div class="admin-actions">
+            <button id="syncBtn" class="btn btn-primary admin-sync-btn" type="button">Sync Now</button>
+            <span class="admin-hint">Force sync is enabled for admin.</span>
+          </div>
+          <span id="toast" class="toast admin-toast" role="status" aria-live="polite"></span>
         </div>
       </section>
     </main>

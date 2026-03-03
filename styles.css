@@ -1091,31 +1091,90 @@ td:nth-child(9) {
 
 /* Admin page */
 .admin-content {
-  margin-top: 32px;
+  margin-top: 28px;
+  display: grid;
+  grid-template-columns: minmax(280px, 560px);
 }
 
 .admin-card {
-  max-width: 480px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 18px;
   background: var(--panel);
-  padding: 24px;
+  padding: 24px 24px 20px;
   box-shadow: var(--shadow);
 }
 
-.admin-card h2 {
+.admin-card-head h2 {
   margin: 0 0 8px;
-  font-size: 20px;
+  font-size: 22px;
+  letter-spacing: -0.01em;
 }
 
-.admin-card p {
-  margin: 0 0 20px;
+.admin-card-head p {
+  margin: 0;
   color: var(--muted);
   font-size: 14px;
+  line-height: 1.5;
+}
+
+.admin-sync-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 18px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel-muted);
+}
+
+.admin-meta-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.admin-meta-value {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.admin-actions {
+  margin-top: 14px;
+}
+
+.admin-sync-btn {
+  min-width: 140px;
+}
+
+.admin-hint {
+  display: block;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .admin-toast {
   display: block;
   margin-top: 12px;
   font-size: 14px;
+  min-height: 18px;
+}
+
+.admin-toast.is-success {
+  color: var(--success);
+}
+
+.admin-toast.is-error {
+  color: var(--danger);
+}
+
+@media (max-width: 640px) {
+  .admin-content {
+    grid-template-columns: 1fr;
+  }
+  .admin-card {
+    padding: 20px 16px;
+  }
 }

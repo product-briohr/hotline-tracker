@@ -3,7 +3,8 @@ const THEME_KEY = "hotline-theme";
 const els = {
   syncBtn: document.querySelector("#syncBtn"),
   toast: document.querySelector("#toast"),
-  themeToggle: document.querySelector("#themeToggle")
+  themeToggle: document.querySelector("#themeToggle"),
+  lastSyncAt: document.querySelector("#lastSyncAt")
 };
 
 init();
@@ -15,6 +16,7 @@ async function init() {
   applySavedTheme();
   els.syncBtn.addEventListener("click", runSync);
   els.themeToggle.addEventListener("click", toggleTheme);
+  await loadLastSyncStatus();
 }
 
 async function safeJson(res) {
@@ -28,27 +30,50 @@ async function safeJson(res) {
 
 async function runSync() {
   const original = els.syncBtn.textContent;
+  clearToast();
   els.syncBtn.disabled = true;
-  els.syncBtn.textContent = "Syncing...";
-  els.toast.textContent = "";
+  els.syncBtn.textContent = "Syncing now...";
 
   try {
     const res = await fetch("/api/sync?force=true", { method: "POST" });
     const data = await safeJson(res);
     if (!data.ok) {
-      els.toast.style.color = "var(--danger)";
-      els.toast.textContent = data.error || "Sync failed";
+      showToast("error", data.error || "Sync failed");
       return;
     }
-    els.toast.style.color = "var(--success)";
-    els.toast.textContent = data.message || "Sync completed";
+    showToast("success", data.message || "Sync completed");
+    await loadLastSyncStatus();
   } catch (error) {
-    els.toast.style.color = "var(--danger)";
-    els.toast.textContent = String(error?.message || error);
+    showToast("error", String(error?.message || error));
   } finally {
     els.syncBtn.disabled = false;
     els.syncBtn.textContent = original;
   }
+}
+
+async function loadLastSyncStatus() {
+  try {
+    const res = await fetch("/api/issues?page=1&pageSize=1", { cache: "no-store" });
+    const data = await safeJson(res);
+    if (!data.ok) {
+      els.lastSyncAt.textContent = "-";
+      return;
+    }
+    els.lastSyncAt.textContent = formatLastUpdated(data?.lastAutoSyncAt);
+  } catch {
+    els.lastSyncAt.textContent = "-";
+  }
+}
+
+function showToast(tone, message) {
+  els.toast.classList.remove("is-error", "is-success");
+  els.toast.classList.add(tone === "error" ? "is-error" : "is-success");
+  els.toast.textContent = String(message || "");
+}
+
+function clearToast() {
+  els.toast.classList.remove("is-error", "is-success");
+  els.toast.textContent = "";
 }
 
 function applySavedTheme() {
@@ -69,4 +94,19 @@ function applyTheme(theme) {
     "aria-label",
     theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
   );
+}
+
+function formatLastUpdated(input) {
+  const raw = String(input || "").trim();
+  if (!raw) return "-";
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  return d.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true
+  });
 }
