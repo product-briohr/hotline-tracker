@@ -1341,6 +1341,7 @@ function initDateRangePicker() {
     allowInput: false,
     minDate: MIN_FILTER_DATE,
     maxDate: "today",
+    disable: [isWeekendDate],
     onOpen: openDatePresetPanel,
     onClose: closeDatePresetPanel,
     onChange(selectedDates) {
@@ -1414,6 +1415,9 @@ function onDatePresetClick(event) {
   const maxDate = toIsoDateLocal(new Date());
   from = clampIsoDateUpperBound(clampIsoDateLowerBound(from, MIN_FILTER_DATE), maxDate);
   to = clampIsoDateUpperBound(clampIsoDateLowerBound(to, MIN_FILTER_DATE), maxDate);
+  from = shiftIsoToWeekday(from, 1);
+  to = shiftIsoToWeekday(to, -1);
+  if (from > to) from = to;
   state.datePicker.setDate([from, to], true, "Y-m-d");
   closeDatePresetPanel();
 }
@@ -1422,6 +1426,21 @@ function shiftDays(inputDate, days) {
   const d = new Date(inputDate);
   d.setDate(d.getDate() + Number(days || 0));
   return d;
+}
+
+function isWeekendDate(date) {
+  const day = Number(date?.getDay?.() ?? -1);
+  return day === 0 || day === 6;
+}
+
+function shiftIsoToWeekday(isoDate, direction) {
+  const raw = String(isoDate || "").trim();
+  if (!raw) return raw;
+  const d = new Date(`${raw}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return raw;
+  const step = Number(direction || 1) >= 0 ? 1 : -1;
+  while (isWeekendDate(d)) d.setDate(d.getDate() + step);
+  return toIsoDateLocal(d);
 }
 
 function clampIsoDateLowerBound(inputDate, minDate) {

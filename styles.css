@@ -265,10 +265,10 @@ input::placeholder {
 
 .table-filters {
   display: grid;
-  grid-template-columns: 180px 170px 220px 170px 170px minmax(400px, 1fr);
+  grid-template-columns: 250px 170px 220px 170px 170px minmax(400px, 1fr);
   gap: 10px;
   margin-bottom: 10px;
-  min-width: 1250px;
+  min-width: 1320px;
 }
 
 .table-filters label {
@@ -281,6 +281,10 @@ input::placeholder {
 
 .date-range-wrap {
   position: relative;
+}
+
+.f-date-range input {
+  font-size: 13px;
 }
 
 .date-presets {
