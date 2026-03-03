@@ -119,7 +119,7 @@ async function init() {
     renderTableFilterMultiSelects();
   });
   resetNewIssueForm();
-  if (isLocalDevHost() && els.syncBtn) {
+  if (els.syncBtn) {
     els.syncBtn.classList.remove("hidden");
     els.syncBtn.removeAttribute("aria-hidden");
   }

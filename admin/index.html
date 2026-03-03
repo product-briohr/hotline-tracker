@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin – Product Hotline Tracker</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <script src="/auth-gate.js"></script>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="topbar-title">
+          <h1>Admin</h1>
+          <p>Product Hotline Tracker</p>
+        </div>
+        <div class="topbar-actions">
+          <a href="/" class="btn">← Back to Tracker</a>
+          <button id="themeToggle" class="theme-switch" type="button" aria-label="Toggle theme" aria-pressed="false">
+            <span class="theme-icon sun">☀</span>
+            <span class="theme-icon moon">☾</span>
+            <span class="theme-knob" aria-hidden="true"></span>
+          </button>
+        </div>
+      </header>
+
+      <section class="admin-content">
+        <div class="admin-card">
+          <h2>Sync</h2>
+          <p>Pull the latest data from Google Drive meeting notes.</p>
+          <button id="syncBtn" class="btn btn-primary" type="button">Sync Now</button>
+          <span id="toast" class="toast admin-toast"></span>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/admin/admin.js"></script>
+  </body>
+</html>
