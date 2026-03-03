@@ -69,6 +69,8 @@ netlify init
 netlify deploy --prod
 ```
 
+Note: for private repos on Netlify free plan, deploys are blocked for unrecognized Git contributors.
+
 ## 7) How sync works
 
 - Scheduled function runs weekdays at `05:00 UTC` (1:00 PM MYT).
