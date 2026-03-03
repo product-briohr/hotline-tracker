@@ -119,10 +119,6 @@ async function init() {
     renderTableFilterMultiSelects();
   });
   resetNewIssueForm();
-  if (els.syncBtn) {
-    els.syncBtn.classList.remove("hidden");
-    els.syncBtn.removeAttribute("aria-hidden");
-  }
 
   els.search.addEventListener("input", debounce(() => goToPage(1), 220));
   els.clearFiltersBtn.addEventListener("click", clearAllFilters);
@@ -130,7 +126,9 @@ async function init() {
   els.tableFilters.addEventListener("click", onFilterClick);
   els.tableFilters.addEventListener("input", onFilterInput);
   els.newIssueBtn.addEventListener("click", openNewIssueModal);
-  els.syncBtn.addEventListener("click", runSync);
+  if (els.syncBtn) {
+    els.syncBtn.addEventListener("click", runSync);
+  }
   els.themeToggle.addEventListener("click", toggleTheme);
   els.rows.addEventListener("click", onTableClick);
   els.rows.addEventListener("input", onTableInput);
