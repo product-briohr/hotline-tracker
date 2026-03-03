@@ -23,6 +23,7 @@
     />
     <meta property="twitter:image" content="/favicon.png" />
     <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -52,9 +53,16 @@
 
       <section class="table-filters">
         <label class="f-date-range">Date range
-          <div class="date-range-inputs">
-            <input id="dateFromFilter" type="date" />
-            <input id="dateToFilter" type="date" />
+          <div id="dateRangeWrap" class="date-range-wrap">
+            <input id="dateRangeFilter" type="text" placeholder="Select date range" />
+            <div id="datePresets" class="date-presets">
+              <button type="button" data-range="today">Today</button>
+              <button type="button" data-range="yesterday">Yesterday</button>
+              <button type="button" data-range="last-week">Last week</button>
+              <button type="button" data-range="last-month">Last month</button>
+              <button type="button" data-range="last-quarter">Last quarter</button>
+              <button type="button" data-range="reset">Reset</button>
+            </div>
           </div>
         </label>
         <label class="f-module">Module<div id="moduleFilterMs"></div></label>
@@ -137,6 +145,7 @@
       </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script type="module" src="/app.js"></script>
   </body>
 </html>

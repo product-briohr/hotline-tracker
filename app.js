@@ -48,12 +48,14 @@ const CS_LIST = [
 const PM_OWNERS = ["Amir", "Idris Ashari", "Nita Puspita", "Nico"];
 const DEFAULT_PAGE_SIZE = 10;
 const THEME_KEY = "hotline-theme";
+const MIN_FILTER_DATE = "2026-02-25";
 
 const els = {
   search: document.querySelector("#search"),
   clearFiltersBtn: document.querySelector("#clearFiltersBtn"),
-  dateFromFilter: document.querySelector("#dateFromFilter"),
-  dateToFilter: document.querySelector("#dateToFilter"),
+  dateRangeWrap: document.querySelector("#dateRangeWrap"),
+  dateRangeFilter: document.querySelector("#dateRangeFilter"),
+  datePresets: document.querySelector("#datePresets"),
   moduleFilterMs: document.querySelector("#moduleFilterMs"),
   issueTypeFilterMs: document.querySelector("#issueTypeFilterMs"),
   csFilterMs: document.querySelector("#csFilterMs"),
@@ -106,7 +108,12 @@ const state = {
   },
   currentRows: [],
   rowsById: new Map(),
-  deletingId: ""
+  deletingId: "",
+  dateRange: {
+    from: "",
+    to: ""
+  },
+  datePicker: null
 };
 
 init();
@@ -124,8 +131,12 @@ async function init() {
 
   els.search.addEventListener("input", debounce(() => goToPage(1), 220));
   els.clearFiltersBtn.addEventListener("click", clearAllFilters);
-  els.dateFromFilter.addEventListener("change", () => goToPage(1));
-  els.dateToFilter.addEventListener("change", () => goToPage(1));
+  initDateRangePicker();
+  els.datePresets.addEventListener("click", onDatePresetClick);
+  els.dateRangeFilter.addEventListener("click", (event) => {
+    event.stopPropagation();
+    openDatePresetPanel();
+  });
   els.tableFilters.addEventListener("click", onFilterClick);
   els.tableFilters.addEventListener("input", onFilterInput);
   els.newIssueBtn.addEventListener("click", openNewIssueModal);
@@ -209,10 +220,13 @@ async function loadRows(options = {}) {
 function buildIssueQueryParams({ page, pageSize }) {
   const qs = new URLSearchParams();
   if (els.search.value.trim()) qs.set("q", els.search.value.trim());
-  const rawFrom = String(els.dateFromFilter.value || "").trim();
-  const rawTo = String(els.dateToFilter.value || "").trim();
-  const dateFrom = rawFrom && rawTo && rawFrom > rawTo ? rawTo : rawFrom;
-  const dateTo = rawFrom && rawTo && rawFrom > rawTo ? rawFrom : rawTo;
+  const maxDate = toIsoDateLocal(new Date());
+  const rawFrom = String(state.dateRange.from || "").trim();
+  const rawTo = String(state.dateRange.to || "").trim();
+  const normalizedFrom = rawFrom && rawTo && rawFrom > rawTo ? rawTo : rawFrom;
+  const normalizedTo = rawFrom && rawTo && rawFrom > rawTo ? rawFrom : rawTo;
+  const dateFrom = clampIsoDateUpperBound(clampIsoDateLowerBound(normalizedFrom, MIN_FILTER_DATE), maxDate);
+  const dateTo = clampIsoDateUpperBound(clampIsoDateLowerBound(normalizedTo, MIN_FILTER_DATE), maxDate);
   if (dateFrom) qs.set("dateFrom", dateFrom);
   if (dateTo) qs.set("dateTo", dateTo);
   for (const v of state.filterValues.module) qs.append("module", v);
@@ -624,6 +638,13 @@ async function onTableClick(event) {
 }
 
 function onDocumentClick(event) {
+  const clickedInDateUi =
+    (els.dateRangeWrap && els.dateRangeWrap.contains(event.target)) ||
+    (els.datePresets && els.datePresets.contains(event.target)) ||
+    Boolean(event.target.closest(".flatpickr-calendar"));
+  if (!clickedInDateUi) {
+    closeDatePresetPanel();
+  }
   if (event.target === els.newIssueModal) {
     closeNewIssueModal();
     return;
@@ -642,6 +663,9 @@ function onDocumentClick(event) {
 }
 
 function onDocumentKeyDown(event) {
+  if (event.key === "Escape") {
+    closeDatePresetPanel();
+  }
   if (event.key === "Escape" && !els.newIssueModal.classList.contains("hidden")) {
     closeNewIssueModal();
   } else if (event.key === "Escape" && !els.deleteConfirmModal.classList.contains("hidden")) {
@@ -1296,8 +1320,9 @@ function onFilterClick(event) {
 
 function clearAllFilters() {
   els.search.value = "";
-  els.dateFromFilter.value = "";
-  els.dateToFilter.value = "";
+  state.dateRange = { from: "", to: "" };
+  if (state.datePicker) state.datePicker.clear();
+  closeDatePresetPanel();
   state.filterValues = {
     module: [],
     issueType: [],
@@ -1306,6 +1331,123 @@ function clearAllFilters() {
   };
   renderTableFilterMultiSelects();
   goToPage(1);
+}
+
+function initDateRangePicker() {
+  if (!els.dateRangeFilter || typeof window.flatpickr !== "function") return;
+  state.datePicker = window.flatpickr(els.dateRangeFilter, {
+    mode: "range",
+    dateFormat: "Y-m-d",
+    allowInput: false,
+    minDate: MIN_FILTER_DATE,
+    maxDate: "today",
+    onOpen: openDatePresetPanel,
+    onClose: closeDatePresetPanel,
+    onChange(selectedDates) {
+      if (!selectedDates.length) {
+        state.dateRange = { from: "", to: "" };
+        goToPage(1);
+        return;
+      }
+      if (selectedDates.length === 1) {
+        const single = clampIsoDateUpperBound(
+          clampIsoDateLowerBound(toIsoDateLocal(selectedDates[0]), MIN_FILTER_DATE),
+          toIsoDateLocal(new Date())
+        );
+        state.dateRange = { from: single, to: single };
+        goToPage(1);
+        return;
+      }
+      const maxDate = toIsoDateLocal(new Date());
+      const a = clampIsoDateUpperBound(
+        clampIsoDateLowerBound(toIsoDateLocal(selectedDates[0]), MIN_FILTER_DATE),
+        maxDate
+      );
+      const b = clampIsoDateUpperBound(
+        clampIsoDateLowerBound(toIsoDateLocal(selectedDates[1]), MIN_FILTER_DATE),
+        maxDate
+      );
+      state.dateRange = a <= b ? { from: a, to: b } : { from: b, to: a };
+      goToPage(1);
+    }
+  });
+  const calendar = state.datePicker?.calendarContainer;
+  if (calendar && els.datePresets) {
+    els.datePresets.classList.add("in-calendar");
+    calendar.appendChild(els.datePresets);
+  }
+  closeDatePresetPanel();
+}
+
+function onDatePresetClick(event) {
+  const btn = event.target.closest("button[data-range]");
+  if (!btn || !state.datePicker) return;
+  const preset = btn.dataset.range || "";
+  const today = new Date();
+  let from = "";
+  let to = "";
+
+  if (preset === "today") {
+    from = toIsoDateLocal(today);
+    to = from;
+  } else if (preset === "yesterday") {
+    const d = shiftDays(today, -1);
+    from = toIsoDateLocal(d);
+    to = from;
+  } else if (preset === "last-week") {
+    from = toIsoDateLocal(shiftDays(today, -6));
+    to = toIsoDateLocal(today);
+  } else if (preset === "last-month") {
+    from = toIsoDateLocal(shiftDays(today, -29));
+    to = toIsoDateLocal(today);
+  } else if (preset === "last-quarter") {
+    from = toIsoDateLocal(shiftDays(today, -89));
+    to = toIsoDateLocal(today);
+  } else if (preset === "reset") {
+    state.datePicker.clear();
+    closeDatePresetPanel();
+    return;
+  } else {
+    return;
+  }
+
+  const maxDate = toIsoDateLocal(new Date());
+  from = clampIsoDateUpperBound(clampIsoDateLowerBound(from, MIN_FILTER_DATE), maxDate);
+  to = clampIsoDateUpperBound(clampIsoDateLowerBound(to, MIN_FILTER_DATE), maxDate);
+  state.datePicker.setDate([from, to], true, "Y-m-d");
+  closeDatePresetPanel();
+}
+
+function shiftDays(inputDate, days) {
+  const d = new Date(inputDate);
+  d.setDate(d.getDate() + Number(days || 0));
+  return d;
+}
+
+function clampIsoDateLowerBound(inputDate, minDate) {
+  const raw = String(inputDate || "").trim();
+  const min = String(minDate || "").trim();
+  if (!raw) return "";
+  if (!min) return raw;
+  return raw < min ? min : raw;
+}
+
+function clampIsoDateUpperBound(inputDate, maxDate) {
+  const raw = String(inputDate || "").trim();
+  const max = String(maxDate || "").trim();
+  if (!raw) return "";
+  if (!max) return raw;
+  return raw > max ? max : raw;
+}
+
+function openDatePresetPanel() {
+  if (!els.datePresets) return;
+  els.datePresets.classList.add("open");
+}
+
+function closeDatePresetPanel() {
+  if (!els.datePresets) return;
+  els.datePresets.classList.remove("open");
 }
 
 function formatLastUpdated(input) {

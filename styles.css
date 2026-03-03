@@ -279,10 +279,55 @@ input::placeholder {
   min-width: 0;
 }
 
-.date-range-inputs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+.date-range-wrap {
+  position: relative;
+}
+
+.date-presets {
+  display: none;
+  flex-wrap: wrap;
+  gap: 6px;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.date-presets.open {
+  display: flex;
+}
+
+.date-presets.in-calendar {
+  position: static;
+  width: auto;
+  padding: 10px 12px 12px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  margin-top: 6px;
+}
+
+.date-presets button {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--panel-muted);
+  cursor: pointer;
+}
+
+.date-presets button:hover {
+  border-color: var(--brand);
+  color: var(--brand);
 }
 
 .table-filters select[multiple] {
@@ -1020,10 +1065,6 @@ td:nth-child(9) {
   }
 
   .table-filters {
-    grid-template-columns: 1fr;
-  }
-
-  .date-range-inputs {
     grid-template-columns: 1fr;
   }
 
