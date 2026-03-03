@@ -52,13 +52,15 @@ const THEME_KEY = "hotline-theme";
 const els = {
   search: document.querySelector("#search"),
   clearFiltersBtn: document.querySelector("#clearFiltersBtn"),
-  dateFilter: document.querySelector("#dateFilter"),
+  dateFromFilter: document.querySelector("#dateFromFilter"),
+  dateToFilter: document.querySelector("#dateToFilter"),
   moduleFilterMs: document.querySelector("#moduleFilterMs"),
   issueTypeFilterMs: document.querySelector("#issueTypeFilterMs"),
   csFilterMs: document.querySelector("#csFilterMs"),
   pmOwnerFilterMs: document.querySelector("#pmOwnerFilterMs"),
   tableFilters: document.querySelector(".table-filters"),
   newIssueBtn: document.querySelector("#newIssueBtn"),
+  exportBtn: document.querySelector("#exportBtn"),
   syncBtn: document.querySelector("#syncBtn"),
   themeToggle: document.querySelector("#themeToggle"),
   pageNumbers: document.querySelector("#pageNumbers"),
@@ -122,10 +124,12 @@ async function init() {
 
   els.search.addEventListener("input", debounce(() => goToPage(1), 220));
   els.clearFiltersBtn.addEventListener("click", clearAllFilters);
-  els.dateFilter.addEventListener("change", () => goToPage(1));
+  els.dateFromFilter.addEventListener("change", () => goToPage(1));
+  els.dateToFilter.addEventListener("change", () => goToPage(1));
   els.tableFilters.addEventListener("click", onFilterClick);
   els.tableFilters.addEventListener("input", onFilterInput);
   els.newIssueBtn.addEventListener("click", openNewIssueModal);
+  els.exportBtn.addEventListener("click", exportFilteredRowsToExcel);
   if (els.syncBtn) {
     els.syncBtn.addEventListener("click", runSync);
   }
@@ -164,15 +168,7 @@ async function safeJson(res) {
 }
 
 async function loadRows(options = {}) {
-  const qs = new URLSearchParams();
-  if (els.search.value.trim()) qs.set("q", els.search.value.trim());
-  if (els.dateFilter.value) qs.set("date", els.dateFilter.value);
-  for (const v of state.filterValues.module) qs.append("module", v);
-  for (const v of state.filterValues.issueType) qs.append("issueType", v);
-  for (const v of state.filterValues.cs) qs.append("cs", v);
-  for (const v of state.filterValues.pmOwner) qs.append("pmOwner", v);
-  qs.set("page", String(state.page));
-  qs.set("pageSize", String(state.pageSize));
+  const qs = buildIssueQueryParams({ page: state.page, pageSize: state.pageSize });
 
   const res = await fetch(`/api/issues?${qs.toString()}`);
   const data = await safeJson(res);
@@ -208,6 +204,122 @@ async function loadRows(options = {}) {
     }
     state.scrollToTableOnNextLoad = false;
   }
+}
+
+function buildIssueQueryParams({ page, pageSize }) {
+  const qs = new URLSearchParams();
+  if (els.search.value.trim()) qs.set("q", els.search.value.trim());
+  const rawFrom = String(els.dateFromFilter.value || "").trim();
+  const rawTo = String(els.dateToFilter.value || "").trim();
+  const dateFrom = rawFrom && rawTo && rawFrom > rawTo ? rawTo : rawFrom;
+  const dateTo = rawFrom && rawTo && rawFrom > rawTo ? rawFrom : rawTo;
+  if (dateFrom) qs.set("dateFrom", dateFrom);
+  if (dateTo) qs.set("dateTo", dateTo);
+  for (const v of state.filterValues.module) qs.append("module", v);
+  for (const v of state.filterValues.issueType) qs.append("issueType", v);
+  for (const v of state.filterValues.cs) qs.append("cs", v);
+  for (const v of state.filterValues.pmOwner) qs.append("pmOwner", v);
+  qs.set("page", String(Math.max(1, Number(page || 1))));
+  qs.set("pageSize", String(Math.max(1, Number(pageSize || DEFAULT_PAGE_SIZE))));
+  return qs;
+}
+
+async function exportFilteredRowsToExcel() {
+  const original = els.exportBtn.textContent;
+  els.exportBtn.disabled = true;
+  els.exportBtn.textContent = "Exporting...";
+  els.toast.textContent = "";
+
+  try {
+    const rows = await fetchAllFilteredRows();
+    if (!rows.length) {
+      els.toast.style.color = "var(--danger)";
+      els.toast.textContent = "No rows to export";
+      return;
+    }
+    const csv = toCsv(rows);
+    downloadCsv(csv, `product-hotline-${toIsoDateLocal(new Date())}.csv`);
+    els.toast.style.color = "var(--success)";
+    els.toast.textContent = `Exported ${rows.length} row(s)`;
+  } catch (error) {
+    els.toast.style.color = "var(--danger)";
+    els.toast.textContent = `Export failed: ${String(error?.message || error)}`;
+  } finally {
+    els.exportBtn.disabled = false;
+    els.exportBtn.textContent = original;
+  }
+}
+
+async function fetchAllFilteredRows() {
+  const pageSize = 100;
+  const firstQs = buildIssueQueryParams({ page: 1, pageSize });
+  const firstRes = await fetch(`/api/issues?${firstQs.toString()}`);
+  const firstData = await safeJson(firstRes);
+  if (!firstData.ok) {
+    throw new Error(firstData.error || "Failed to load rows for export");
+  }
+
+  const allRows = Array.isArray(firstData.rows) ? [...firstData.rows] : [];
+  const totalPages = Math.max(1, Number(firstData?.pagination?.totalPages || 1));
+  if (totalPages <= 1) return allRows;
+
+  for (let page = 2; page <= totalPages; page += 1) {
+    const qs = buildIssueQueryParams({ page, pageSize });
+    const res = await fetch(`/api/issues?${qs.toString()}`);
+    const data = await safeJson(res);
+    if (!data.ok) {
+      throw new Error(data.error || `Failed while exporting page ${page}`);
+    }
+    if (Array.isArray(data.rows)) allRows.push(...data.rows);
+  }
+  return allRows;
+}
+
+function toCsv(rows) {
+  const headers = [
+    "Date",
+    "Module",
+    "Issue Type",
+    "CS",
+    "PM Owner",
+    "Issue / Question Description",
+    "Comments"
+  ];
+  const lines = [headers.map(csvEscape).join(",")];
+
+  for (const row of rows) {
+    lines.push(
+      [
+        row.date || "",
+        row.module || "",
+        row.issueType || "",
+        row.cs || "",
+        row.pmOwner || "",
+        row.description || "",
+        row.comments || ""
+      ]
+        .map(csvEscape)
+        .join(",")
+    );
+  }
+  return `\uFEFF${lines.join("\n")}`;
+}
+
+function csvEscape(value) {
+  const text = String(value ?? "");
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+function downloadCsv(csvText, filename) {
+  const blob = new Blob([csvText], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function renderTable() {
@@ -1184,7 +1296,8 @@ function onFilterClick(event) {
 
 function clearAllFilters() {
   els.search.value = "";
-  els.dateFilter.value = "";
+  els.dateFromFilter.value = "";
+  els.dateToFilter.value = "";
   state.filterValues = {
     module: [],
     issueType: [],

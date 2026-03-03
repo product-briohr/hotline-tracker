@@ -279,6 +279,12 @@ input::placeholder {
   min-width: 0;
 }
 
+.date-range-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
 .table-filters select[multiple] {
   min-height: 86px;
 }
@@ -1014,6 +1020,10 @@ td:nth-child(9) {
   }
 
   .table-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .date-range-inputs {
     grid-template-columns: 1fr;
   }
 

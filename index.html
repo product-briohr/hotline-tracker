@@ -35,6 +35,7 @@
         </div>
         <div class="topbar-actions">
           <button id="newIssueBtn" class="btn" type="button">+ New Issue</button>
+          <button id="exportBtn" class="btn" type="button">Export Excel</button>
           <button id="themeToggle" class="theme-switch" type="button" aria-label="Toggle theme" aria-pressed="false">
             <span class="theme-icon sun">☀</span>
             <span class="theme-icon moon">☾</span>
@@ -50,7 +51,12 @@
       </section>
 
       <section class="table-filters">
-        <label class="f-date">Date<input id="dateFilter" type="date" /></label>
+        <label class="f-date-range">Date range
+          <div class="date-range-inputs">
+            <input id="dateFromFilter" type="date" />
+            <input id="dateToFilter" type="date" />
+          </div>
+        </label>
         <label class="f-module">Module<div id="moduleFilterMs"></div></label>
         <label class="f-issue-type">Issue Type<div id="issueTypeFilterMs"></div></label>
         <label class="f-cs">CS<div id="csFilterMs"></div></label>
