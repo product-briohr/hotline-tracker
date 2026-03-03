@@ -10,9 +10,7 @@ export default async (request) => {
 
   const authError = assertSyncAuth(request);
   if (authError) return authError;
-  const url = new URL(request.url);
-  const force = ["1", "true", "yes"].includes((url.searchParams.get("force") || "").toLowerCase());
-  return runSyncOnce({ force });
+  return runSyncOnce({});
 };
 
 function assertSyncAuth(request) {

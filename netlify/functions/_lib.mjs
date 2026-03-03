@@ -341,7 +341,7 @@ Allowed PM owner: ${PM_OWNERS.join(" | ")}
 
 Rules:
 - Use ${dateIso} as default date if missing.
-- Keep only actionable product issues/questions.
+- Include ALL bullets from Details: issues, questions, status updates, discussions, and items stakeholders may want to track. Do not skip any.
 - Max 80 rows.
 - If unsure module -> Others/General
 - If unsure issue type -> Question/Troubleshooting
@@ -1304,7 +1304,6 @@ export async function runSyncOnce(options = {}) {
     }
 
     if (stamped.length) {
-      // Append new file rows only; preserve historical and manually edited rows.
       const merged = [...stamped, ...issues];
       await saveIssues(store, merged);
     }
