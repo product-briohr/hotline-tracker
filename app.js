@@ -1338,6 +1338,8 @@ function initDateRangePicker() {
   state.datePicker = window.flatpickr(els.dateRangeFilter, {
     mode: "range",
     dateFormat: "Y-m-d",
+    altInput: true,
+    altFormat: "d/m/Y",
     allowInput: false,
     minDate: MIN_FILTER_DATE,
     maxDate: "today",
@@ -1376,6 +1378,13 @@ function initDateRangePicker() {
   if (calendar && els.datePresets) {
     els.datePresets.classList.add("in-calendar");
     calendar.appendChild(els.datePresets);
+  }
+  if (state.datePicker?.altInput) {
+    state.datePicker.altInput.placeholder = "Select date range";
+    state.datePicker.altInput.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openDatePresetPanel();
+    });
   }
   closeDatePresetPanel();
 }

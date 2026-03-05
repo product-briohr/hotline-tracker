@@ -191,6 +191,21 @@ input::placeholder {
   box-shadow: var(--shadow);
 }
 
+.topbar-cta-btn {
+  min-width: 100px;
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.topbar-cta-btn .fa {
+  font-size: 13px;
+}
+
 .btn-primary {
   background: var(--brand);
   border-color: var(--brand);
@@ -989,6 +1004,12 @@ td:nth-child(9) {
     min-height: 40px;
   }
 
+  .topbar-cta-btn {
+    min-width: 170px;
+    min-height: 42px;
+    font-size: 14px;
+  }
+
   .table-filters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
@@ -1051,6 +1072,12 @@ td:nth-child(9) {
     flex: 1 1 auto;
     text-align: center;
     padding: 10px 12px;
+  }
+
+  .topbar-cta-btn {
+    min-width: 0;
+    min-height: 40px;
+    font-size: 13px;
   }
 
   .theme-switch {
