@@ -44,89 +44,12 @@ export default async (request) => {
     const rows = await loadIssues(store);
     const filters = extractPromptFilters(prompt);
     const scopedRows = applyPromptFilters(rows, filters);
-    const compactRows = pickRowsForAi(scopedRows.length ? scopedRows : rows, 220);
-
-    const instruction = [
-      "You are an analytics assistant for Product Hotline Tracker.",
-      "Analyze the full dataset and answer the user's prompt with contextual logic.",
-      "Important rules:",
-      "- Use the question/description content, not just tags.",
-      "- Apply any implied filters in the prompt (month, year, issue type, module, PM owner).",
-      "- Do NOT mention raw row counts unless user explicitly asks for counts.",
-      "- Give practical insights, concise but meaningful.",
-      "- Include sections exactly in this order:",
-      "  1) Answer",
-      "  2) Logic used",
-      "  3) Relevant evidence",
-      "- In Relevant evidence include 3-6 short bullets quoting snippets with date/module context.",
-      "- If data is insufficient, say what is missing and what prompt user can try next."
-    ].join("\n");
-
-    const payloadText = JSON.stringify(compactRows);
-    const content = `${instruction}\n\nUser prompt:\n${prompt}\n\nDataset rows (JSON):\n${payloadText}`;
-
-    try {
-      const answer = await runFreeAiSummary(content);
-      if (!answer) {
-        return json(200, { ok: true, answer: buildFallbackAnswer(prompt, scopedRows.length ? scopedRows : rows, false) });
-      }
-      return json(200, { ok: true, answer });
-    } catch (error) {
-      const message = String(error?.message || error);
-      if (isQuotaOrRateLimitError(message)) {
-        const fallbackAnswer = buildFallbackAnswer(prompt, scopedRows.length ? scopedRows : rows, true);
-        return json(200, { ok: true, answer: fallbackAnswer });
-      }
-      throw error;
-    }
+    const answer = buildFallbackAnswer(prompt, scopedRows.length ? scopedRows : rows, false);
+    return json(200, { ok: true, answer });
   } catch (error) {
     return json(500, { ok: false, error: String(error?.message || error) });
   }
 };
-
-async function runFreeAiSummary(content) {
-  const model = String(process.env.HF_MODEL || "google/flan-t5-large").trim();
-  const token = String(process.env.HF_API_TOKEN || "").trim();
-  const endpoint = `https://api-inference.huggingface.co/models/${encodeURIComponent(model)}`;
-
-  const headers = { "content-type": "application/json" };
-  if (token) headers.authorization = `Bearer ${token}`;
-
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      inputs: content,
-      parameters: {
-        max_new_tokens: 380,
-        temperature: 0.2,
-        return_full_text: false
-      }
-    })
-  });
-
-  const text = await res.text();
-  let parsed = null;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    parsed = null;
-  }
-
-  if (!res.ok) {
-    const errMsg =
-      parsed?.error || parsed?.message || text.slice(0, 240) || `HF request failed (${res.status})`;
-    throw new Error(errMsg);
-  }
-
-  if (Array.isArray(parsed) && parsed[0]?.generated_text) {
-    return String(parsed[0].generated_text || "").trim();
-  }
-  if (typeof parsed?.generated_text === "string") {
-    return String(parsed.generated_text || "").trim();
-  }
-  return "";
-}
 
 function pickRowsForAi(rows, limit) {
   const out = [];
@@ -142,11 +65,6 @@ function pickRowsForAi(rows, limit) {
     });
   }
   return out;
-}
-
-function isQuotaOrRateLimitError(message) {
-  const text = String(message || "").toLowerCase();
-  return text.includes("429") || text.includes("quota") || text.includes("rate limit");
 }
 
 function extractPromptFilters(promptRaw) {
