@@ -83,7 +83,7 @@ const CS_NAME_ALIASES = [
   [/\bnoor\s+diyana\s+binti\s+kaseharom\b/gi, "Diyana"],
   [/\bnur\s+diyana\s+binti\s+sajali\b/gi, "Yana"]
 ];
-const SAFE_NAME_ALLOWLIST = new Set([...CS_LIST, ...PM_OWNERS].map((x) => String(x || "").toLowerCase()));
+const SAFE_NAME_ALLOWLIST = buildSafeNameAllowlist([...CS_LIST, ...PM_OWNERS]);
 
 export const ENUMS = {
   MODULES,
@@ -564,6 +564,11 @@ export function maskEmployeeNames(input) {
     (full, lead, name) => `${lead}${maskNameCandidate(name)}`
   );
 
+  text = text.replace(
+    /\b([A-Z][A-Za-z'`-]{2,}(?:\s+[A-Z][A-Za-z'`-]{2,}){0,2})(?=\s+(?:had|has|have|was|were|is|are|did|submitted|raised|reported|mentioned|asked|requested|faced|encountered)\b)/g,
+    (full, name) => maskNameCandidate(name)
+  );
+
   return text;
 }
 
@@ -573,6 +578,19 @@ function maskNameCandidate(name) {
   const normalized = raw.toLowerCase().replace(/\s+/g, " ");
   if (SAFE_NAME_ALLOWLIST.has(normalized)) return raw;
   return "****";
+}
+
+function buildSafeNameAllowlist(names) {
+  const out = new Set();
+  for (const name of names || []) {
+    const full = String(name || "").trim().toLowerCase();
+    if (!full) continue;
+    out.add(full);
+    for (const part of full.split(/\s+/)) {
+      if (part.length >= 2) out.add(part);
+    }
+  }
+  return out;
 }
 
 function normalizeEnumMulti(input, allowed, fallback) {
