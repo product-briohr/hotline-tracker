@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { assertPasswordGate, getDataStore, json, loadIssues } from "./_lib.mjs";
 
 const MONTHS = {
@@ -41,20 +40,11 @@ export default async (request) => {
     const prompt = String(body?.prompt || "").trim();
     if (!prompt) return json(400, { ok: false, error: "Missing prompt" });
 
-    const apiKey = String(process.env.GEMINI_API_KEY || "").trim();
-    if (!apiKey) {
-      return json(500, { ok: false, error: "Missing GEMINI_API_KEY for analytics chat" });
-    }
-
     const store = getDataStore();
     const rows = await loadIssues(store);
     const filters = extractPromptFilters(prompt);
     const scopedRows = applyPromptFilters(rows, filters);
     const compactRows = pickRowsForAi(scopedRows.length ? scopedRows : rows, 220);
-
-    const modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash";
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: modelName });
 
     const instruction = [
       "You are an analytics assistant for Product Hotline Tracker.",
@@ -76,12 +66,7 @@ export default async (request) => {
     const content = `${instruction}\n\nUser prompt:\n${prompt}\n\nDataset rows (JSON):\n${payloadText}`;
 
     try {
-      const result = await model.generateContent({
-        contents: [{ role: "user", parts: [{ text: content }] }],
-        generationConfig: { temperature: 0.2 }
-      });
-
-      const answer = String(result?.response?.text?.() || "").trim();
+      const answer = await runFreeAiSummary(content);
       if (!answer) {
         return json(200, { ok: true, answer: buildFallbackAnswer(prompt, scopedRows.length ? scopedRows : rows, false) });
       }
@@ -98,6 +83,50 @@ export default async (request) => {
     return json(500, { ok: false, error: String(error?.message || error) });
   }
 };
+
+async function runFreeAiSummary(content) {
+  const model = String(process.env.HF_MODEL || "google/flan-t5-large").trim();
+  const token = String(process.env.HF_API_TOKEN || "").trim();
+  const endpoint = `https://api-inference.huggingface.co/models/${encodeURIComponent(model)}`;
+
+  const headers = { "content-type": "application/json" };
+  if (token) headers.authorization = `Bearer ${token}`;
+
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      inputs: content,
+      parameters: {
+        max_new_tokens: 380,
+        temperature: 0.2,
+        return_full_text: false
+      }
+    })
+  });
+
+  const text = await res.text();
+  let parsed = null;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    parsed = null;
+  }
+
+  if (!res.ok) {
+    const errMsg =
+      parsed?.error || parsed?.message || text.slice(0, 240) || `HF request failed (${res.status})`;
+    throw new Error(errMsg);
+  }
+
+  if (Array.isArray(parsed) && parsed[0]?.generated_text) {
+    return String(parsed[0].generated_text || "").trim();
+  }
+  if (typeof parsed?.generated_text === "string") {
+    return String(parsed.generated_text || "").trim();
+  }
+  return "";
+}
 
 function pickRowsForAi(rows, limit) {
   const out = [];
