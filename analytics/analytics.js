@@ -10,32 +10,6 @@ const els = {
 const state = {
   rows: []
 };
-const MONTHS = {
-  january: 1,
-  jan: 1,
-  february: 2,
-  feb: 2,
-  march: 3,
-  mar: 3,
-  april: 4,
-  apr: 4,
-  may: 5,
-  june: 6,
-  jun: 6,
-  july: 7,
-  jul: 7,
-  august: 8,
-  aug: 8,
-  september: 9,
-  sep: 9,
-  sept: 9,
-  october: 10,
-  oct: 10,
-  november: 11,
-  nov: 11,
-  december: 12,
-  dec: 12
-};
 
 init();
 
@@ -97,50 +71,26 @@ function onChatSubmit(event) {
   if (!prompt) return;
   els.chatInput.value = "";
   addUserMessage(prompt);
-  addBotMessage(answerPrompt(prompt));
+  void askAnalyticsBot(prompt);
 }
 
-function answerPrompt(promptRaw) {
-  const prompt = promptRaw.toLowerCase();
-  if (!state.rows.length) return "No rows available yet.";
-
-  const filters = extractPromptFilters(promptRaw);
-  const scopedRows = applyPromptFilters(state.rows, filters);
-  if (!scopedRows.length) {
-    return `No matching rows for that filter (${humanizeFilterScope(filters)}).`;
+async function askAnalyticsBot(prompt) {
+  const thinkingEl = addBotMessage("Analyzing your prompt...");
+  try {
+    const res = await fetch("/api/analytics/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ prompt })
+    });
+    const data = await safeJson(res);
+    if (!data.ok) {
+      updateBotMessage(thinkingEl, data.error || "Failed to analyze your prompt.");
+      return;
+    }
+    updateBotMessage(thinkingEl, String(data.answer || "No answer returned."));
+  } catch (error) {
+    updateBotMessage(thinkingEl, String(error?.message || error));
   }
-
-  const issueTypeCounts = sortedCounts(countBy(scopedRows, (r) => String(r.issueType || "Unknown")));
-  const moduleCounts = sortedCounts(countBy(scopedRows, (r) => String(r.module || "Unknown")));
-  const pmCounts = sortedCounts(countBy(scopedRows, (r) => String(r.pmOwner || "Unassigned")));
-  const scope = humanizeFilterScope(filters);
-
-  if (/top.*module|module.*top|recurring.*module/.test(prompt)) {
-    return `Top modules (${scope}): ${moduleCounts
-      .slice(0, 5)
-      .map(([k, v]) => `${k} (${v})`)
-      .join(", ")}`;
-  }
-
-  if (/top.*pm|pm.*top|owner/.test(prompt)) {
-    return `Top PM owners (${scope}): ${pmCounts
-      .slice(0, 5)
-      .map(([k, v]) => `${k} (${v})`)
-      .join(", ")}`;
-  }
-
-  if (/summary|overall|overview/.test(prompt) || /give me a summary/.test(prompt)) {
-    return `Summary (${scope}): total rows ${scopedRows.length}; top issue type ${issueTypeCounts[0][0]} (${issueTypeCounts[0][1]}); top module ${moduleCounts[0][0]} (${moduleCounts[0][1]}); top PM ${pmCounts[0][0]} (${pmCounts[0][1]}).`;
-  }
-
-  if (/(most|top).*(recurring|issue|type)|bug|feature|question|troubleshooting/.test(prompt)) {
-    const top = issueTypeCounts[0];
-    return `Most recurring issue type (${scope}) is "${top[0]}" (${top[1]} rows). Breakdown: ${issueTypeCounts
-      .map(([k, v]) => `${k}: ${v}`)
-      .join(", ")}`;
-  }
-
-  return `I can answer with filters too. Try: "summary for March", "top modules in Feb 2026", "top PM owner for bug in March".`;
 }
 
 function countBy(rows, getter) {
@@ -156,52 +106,6 @@ function sortedCounts(map) {
   return [...map.entries()].sort((a, b) => b[1] - a[1]);
 }
 
-function extractPromptFilters(promptRaw) {
-  const prompt = String(promptRaw || "").toLowerCase();
-  const yearMatch = prompt.match(/\b(20\d{2})\b/);
-  const year = yearMatch ? Number(yearMatch[1]) : null;
-
-  let month = null;
-  for (const [name, num] of Object.entries(MONTHS)) {
-    const re = new RegExp(`\\b${name}\\b`, "i");
-    if (re.test(prompt)) {
-      month = num;
-      break;
-    }
-  }
-
-  let issueType = "";
-  if (/\bbug\b/.test(prompt)) issueType = "Bug (CS ticket)";
-  else if (/\bfeature\b/.test(prompt)) issueType = "Feature request";
-  else if (/\bquestion\b|\btroubleshooting\b/.test(prompt)) issueType = "Question/Troubleshooting";
-
-  return { year, month, issueType };
-}
-
-function applyPromptFilters(rows, filters) {
-  return rows.filter((row) => {
-    const date = String(row.date || "");
-    if (filters.year && !date.startsWith(`${filters.year}-`)) return false;
-    if (filters.month) {
-      const m = Number((date.split("-")[1] || "0"));
-      if (m !== filters.month) return false;
-    }
-    if (filters.issueType && String(row.issueType || "") !== filters.issueType) return false;
-    return true;
-  });
-}
-
-function humanizeFilterScope(filters) {
-  const out = [];
-  if (filters.month) {
-    const monthName = Object.keys(MONTHS).find((k) => MONTHS[k] === filters.month && k.length > 3) || "";
-    out.push(monthName ? monthName[0].toUpperCase() + monthName.slice(1) : `month ${filters.month}`);
-  }
-  if (filters.year) out.push(String(filters.year));
-  if (filters.issueType) out.push(filters.issueType);
-  return out.join(" / ") || "all data";
-}
-
 function addUserMessage(text) {
   els.chatMessages.insertAdjacentHTML(
     "beforeend",
@@ -213,8 +117,16 @@ function addUserMessage(text) {
 function addBotMessage(text) {
   els.chatMessages.insertAdjacentHTML(
     "beforeend",
-    `<div class="chat-msg bot"><span>${escapeHtml(text)}</span></div>`
+    `<div class="chat-msg bot"><span>${escapeHtml(text).replaceAll("\n", "<br>")}</span></div>`
   );
+  const messageNode = els.chatMessages.lastElementChild;
+  els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+  return messageNode;
+}
+
+function updateBotMessage(messageNode, text) {
+  const span = messageNode?.querySelector("span");
+  if (span) span.innerHTML = escapeHtml(String(text || "")).replaceAll("\n", "<br>");
   els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
 }
 
