@@ -198,8 +198,13 @@ input::placeholder {
   align-items: center;
   justify-content: center;
   gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
   font-size: 15px;
   font-weight: 400;
+  text-decoration: none;
 }
 
 .topbar-cta-btn .fa {
@@ -207,7 +212,7 @@ input::placeholder {
 }
 
 .analytics-link-btn {
-  text-decoration: none;
+  color: var(--text);
 }
 
 .btn-primary {
