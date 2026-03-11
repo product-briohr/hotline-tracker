@@ -58,6 +58,27 @@ const CS_LIST = [
 ];
 
 const PM_OWNERS = ["Amir", "Idris Ashari", "Nita Puspita", "Nico"];
+const PM_OWNER_BY_MODULE = {
+  "Claims": "Amir",
+  "Document Management": "Amir",
+  "Training": "Amir",
+  "Time Attendance": "Nita Puspita",
+  "Performance": "Nita Puspita",
+  "Timesheets": "Nita Puspita",
+  "Leave": "Nico",
+  "Recruitment": "Nico",
+  "Onboarding v3": "Nico",
+  "Payroll": "Idris Ashari",
+  "Emails": "Idris Ashari",
+  "Profile/Core": "Idris Ashari",
+  "Import/Export": "Idris Ashari",
+  "Report builder": "Idris Ashari",
+  "Who's away": "Idris Ashari",
+  "Feed": "Idris Ashari",
+  "Staffany": "Idris Ashari",
+  "Xero": "Idris Ashari",
+  "Pulse": "Idris Ashari"
+};
 const CS_NAME_ALIASES = [
   [/\bnoor\s+diyana\s+binti\s+kaseharom\b/gi, "Diyana"],
   [/\bnur\s+diyana\s+binti\s+sajali\b/gi, "Yana"]
@@ -546,7 +567,8 @@ export function reclassifyRowByDescription(row, options = {}) {
     module: inferred.module || row.module || "Others/General",
     issueType: inferred.issueType || row.issueType || "Question/Troubleshooting",
     cs: overwriteActors ? (inferred.cs || row.cs || "") : row.cs || inferred.cs || "",
-    pmOwner: overwriteActors ? (inferred.pmOwner || row.pmOwner || "") : row.pmOwner || inferred.pmOwner || ""
+    // PM owner tagging is strictly module-keyword based.
+    pmOwner: overwriteActors ? inferred.pmOwner || "" : row.pmOwner || inferred.pmOwner || ""
   };
 }
 
@@ -863,19 +885,11 @@ function enrichWithInference(row, precomputedInference) {
 
 function inferFieldsFromDescription(description) {
   const text = String(description || "");
-  const lc = text.toLowerCase();
-
-  let module = "";
-  for (const [value, regex] of MODULE_KEYWORDS) {
-    if (regex.test(lc)) {
-      module = value;
-      break;
-    }
-  }
+  const module = inferModuleFromDescription(text);
 
   let issueType = "";
   for (const [value, regex] of ISSUE_KEYWORDS) {
-    if (regex.test(lc)) {
+    if (regex.test(text.toLowerCase())) {
       issueType = value;
       break;
     }
@@ -885,13 +899,28 @@ function inferFieldsFromDescription(description) {
   }
 
   const participants = inferParticipantsFromKeywordClauses(text);
+  const pmOwner = inferPmOwnerFromModule(module);
 
   return {
     module,
     issueType,
     cs: participants.cs,
-    pmOwner: participants.pmOwner
+    pmOwner
   };
+}
+
+function inferModuleFromDescription(description) {
+  const lc = String(description || "").toLowerCase();
+  for (const [value, regex] of MODULE_KEYWORDS) {
+    if (regex.test(lc)) return value;
+  }
+  return "";
+}
+
+function inferPmOwnerFromModule(module) {
+  const key = String(module || "").trim();
+  if (!key) return "";
+  return PM_OWNER_BY_MODULE[key] || "";
 }
 
 function inferPerson(text, allowed) {
@@ -1127,16 +1156,18 @@ ${JSON.stringify(compact)}
     return rows.map((row, idx) => {
       const fix = byIndex.get(idx);
       if (!fix) return row;
+      const module = normalizeEnum(fix.module, MODULES, row.module || "Others/General");
       return {
         ...row,
-        module: normalizeEnum(fix.module, MODULES, row.module || "Others/General"),
+        module,
         issueType: normalizeEnum(
           fix.issueType,
           ISSUE_TYPES,
           row.issueType || "Question/Troubleshooting"
         ),
         cs: normalizeEnum(fix.cs, CS_LIST, row.cs || ""),
-        pmOwner: normalizeEnum(fix.pmOwner, PM_OWNERS, row.pmOwner || "")
+        // Always enforce strict module-keyword PM ownership mapping.
+        pmOwner: inferPmOwnerFromModule(inferModuleFromDescription(row.description || "")) || ""
       };
     });
   } catch {
