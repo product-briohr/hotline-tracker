@@ -899,7 +899,7 @@ function inferFieldsFromDescription(description) {
   }
 
   const participants = inferParticipantsFromKeywordClauses(text);
-  const pmOwner = inferPmOwnerFromModule(module);
+  const pmOwner = inferPmOwnerByRule(module, participants.pmOwner);
 
   return {
     module,
@@ -921,6 +921,13 @@ function inferPmOwnerFromModule(module) {
   const key = String(module || "").trim();
   if (!key) return "";
   return PM_OWNER_BY_MODULE[key] || "";
+}
+
+function inferPmOwnerByRule(module, participantPmOwner) {
+  const mappedByModule = inferPmOwnerFromModule(module);
+  if (mappedByModule) return mappedByModule;
+  // Fallback only when no module keyword is matched in description.
+  return module ? "" : String(participantPmOwner || "").trim();
 }
 
 function inferPerson(text, allowed) {
@@ -1157,6 +1164,8 @@ ${JSON.stringify(compact)}
       const fix = byIndex.get(idx);
       if (!fix) return row;
       const module = normalizeEnum(fix.module, MODULES, row.module || "Others/General");
+      const inferredModule = inferModuleFromDescription(row.description || "");
+      const participants = inferParticipantsFromKeywordClauses(row.description || "");
       return {
         ...row,
         module,
@@ -1166,8 +1175,8 @@ ${JSON.stringify(compact)}
           row.issueType || "Question/Troubleshooting"
         ),
         cs: normalizeEnum(fix.cs, CS_LIST, row.cs || ""),
-        // Always enforce strict module-keyword PM ownership mapping.
-        pmOwner: inferPmOwnerFromModule(inferModuleFromDescription(row.description || "")) || ""
+        // Enforce PM owner by module keyword, with fallback to discussed PM only when no module is matched.
+        pmOwner: inferPmOwnerByRule(inferredModule, participants.pmOwner)
       };
     });
   } catch {
