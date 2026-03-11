@@ -5,7 +5,8 @@ import {
   getDataStore,
   getLastAutoSyncAt,
   json,
-  loadIssues
+  loadIssues,
+  maskEmployeeNames
 } from "./_lib.mjs";
 
 const { CS_LIST } = ENUMS;
@@ -53,7 +54,10 @@ export default async (request) => {
     const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
     const safePage = Math.min(page, totalPages);
     const start = (safePage - 1) * pageSize;
-    const rows = filtered.slice(start, start + pageSize);
+    const rows = filtered.slice(start, start + pageSize).map((row) => ({
+      ...row,
+      description: maskEmployeeNames(row.description || "")
+    }));
 
     return json(200, {
       ok: true,

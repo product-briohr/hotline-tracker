@@ -83,6 +83,7 @@ const CS_NAME_ALIASES = [
   [/\bnoor\s+diyana\s+binti\s+kaseharom\b/gi, "Diyana"],
   [/\bnur\s+diyana\s+binti\s+sajali\b/gi, "Yana"]
 ];
+const SAFE_NAME_ALLOWLIST = new Set([...CS_LIST, ...PM_OWNERS].map((x) => String(x || "").toLowerCase()));
 
 export const ENUMS = {
   MODULES,
@@ -412,7 +413,7 @@ Meeting notes:
 }
 
 function normalizeRow(row, defaultDate) {
-  const description = String(row?.description || "").trim();
+  const description = maskEmployeeNames(String(row?.description || "").trim());
   const inferred = inferFieldsFromDescription(description);
   const normalized = {
     date: normalizeDate(row?.date, defaultDate),
@@ -534,9 +535,44 @@ export function sanitizeEditableRow(input) {
     issueType: normalizeEnumMulti(input?.issueType, ISSUE_TYPES, "Question/Troubleshooting"),
     cs: normalizeEnumMulti(input?.cs, CS_LIST, ""),
     pmOwner: normalizeEnumMulti(input?.pmOwner, PM_OWNERS, ""),
-    description: String(input?.description || "").trim(),
+    description: maskEmployeeNames(String(input?.description || "").trim()),
     comments: String(input?.comments || "").trim().slice(0, 2000)
   };
+}
+
+export function maskEmployeeNames(input) {
+  let text = String(input || "");
+  if (!text) return "";
+
+  text = text.replace(
+    /\b((?:employee|staff|user|candidate)\s+(?:name(?:d)?|called)?\s*)([A-Z][A-Za-z'`-]+(?:\s+[A-Z][A-Za-z'`-]+){0,5})/g,
+    (full, prefix, name) => `${prefix}${maskNameCandidate(name)}`
+  );
+
+  text = text.replace(
+    /\b((?:named|name\s+is|employee\s+name)\s*)([A-Z][A-Za-z'`-]+(?:\s+[A-Z][A-Za-z'`-]+){0,5})/gi,
+    (full, prefix, name) => `${prefix}${maskNameCandidate(name)}`
+  );
+
+  text = text.replace(
+    /\bfor\s+([A-Z][A-Za-z'`-]+)(?=:)/g,
+    (full, name) => `for ${maskNameCandidate(name)}`
+  );
+
+  text = text.replace(
+    /(:\s*)([A-Z][A-Za-z'`-]+(?:\s+[A-Z][A-Za-z'`-]+){1,5})(?=\s+(?:discussed|reported|raised|mentioned|asked|requested|faced|encountered)\b)/g,
+    (full, lead, name) => `${lead}${maskNameCandidate(name)}`
+  );
+
+  return text;
+}
+
+function maskNameCandidate(name) {
+  const raw = String(name || "").trim();
+  if (!raw) return raw;
+  const normalized = raw.toLowerCase().replace(/\s+/g, " ");
+  if (SAFE_NAME_ALLOWLIST.has(normalized)) return raw;
+  return "****";
 }
 
 function normalizeEnumMulti(input, allowed, fallback) {
