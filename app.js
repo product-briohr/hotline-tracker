@@ -969,7 +969,7 @@ function openChatModal() {
   if (!els.chatModal) return;
   els.chatModal.classList.remove("hidden");
   if (els.chatMessages && !els.chatMessages.childElementCount) {
-    addBotMessage("Ask any trend question. I will reply with one-paragraph summary.");
+    addBotMessage("Hi, I'm the BrioHR Product Hotline bot. How can I help you today?");
   }
   if (els.chatInput) els.chatInput.focus();
 }

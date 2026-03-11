@@ -1397,10 +1397,57 @@ td:nth-child(9) {
 
 .chat-modal-card {
   width: min(760px, 96vw);
+  max-height: min(86vh, 760px);
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 10px;
 }
 
 @media (max-width: 980px) {
   .analytics-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .chat-fab {
+    right: max(14px, env(safe-area-inset-right));
+    bottom: max(14px, env(safe-area-inset-bottom));
+    width: 58px;
+    height: 58px;
+  }
+
+  .chat-fab .fa {
+    font-size: 26px;
+  }
+
+  .chat-modal-card {
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px - env(safe-area-inset-bottom));
+    padding: 12px;
+    border-radius: 12px;
+    gap: 8px;
+  }
+
+  .chat-messages {
+    min-height: 180px;
+    max-height: 46vh;
+    padding: 8px;
+    gap: 6px;
+  }
+
+  .chat-msg span {
+    max-width: 94%;
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .chat-form {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .chat-form .btn {
+    width: 100%;
   }
 }
