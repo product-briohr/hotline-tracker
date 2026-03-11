@@ -9,6 +9,11 @@
   status = 200
 
 [[redirects]]
+  from = "/analytics"
+  to = "/analytics/index.html"
+  status = 200
+
+[[redirects]]
   from = "/api/sync"
   to = "/.netlify/functions/sync-hotline"
   status = 200
