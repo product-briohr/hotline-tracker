@@ -87,7 +87,13 @@ const els = {
   deleteConfirmModal: document.querySelector("#deleteConfirmModal"),
   deleteConfirmClose: document.querySelector("#deleteConfirmClose"),
   deleteConfirmCancel: document.querySelector("#deleteConfirmCancel"),
-  deleteConfirmSubmit: document.querySelector("#deleteConfirmSubmit")
+  deleteConfirmSubmit: document.querySelector("#deleteConfirmSubmit"),
+  chatFab: document.querySelector("#chatFab"),
+  chatModal: document.querySelector("#chatModal"),
+  chatModalClose: document.querySelector("#chatModalClose"),
+  chatMessages: document.querySelector("#chatMessages"),
+  chatForm: document.querySelector("#chatForm"),
+  chatInput: document.querySelector("#chatInput")
 };
 
 const state = {
@@ -158,6 +164,9 @@ async function init() {
   els.deleteConfirmClose.addEventListener("click", closeDeleteConfirmModal);
   els.deleteConfirmCancel.addEventListener("click", closeDeleteConfirmModal);
   els.deleteConfirmSubmit.addEventListener("click", onDeleteConfirmSubmit);
+  if (els.chatFab) els.chatFab.addEventListener("click", openChatModal);
+  if (els.chatModalClose) els.chatModalClose.addEventListener("click", closeChatModal);
+  if (els.chatForm) els.chatForm.addEventListener("submit", onChatSubmit);
   document.addEventListener("click", onDocumentClick);
   document.addEventListener("keydown", onDocumentKeyDown);
 
@@ -653,6 +662,10 @@ function onDocumentClick(event) {
     closeDeleteConfirmModal();
     return;
   }
+  if (event.target === els.chatModal) {
+    closeChatModal();
+    return;
+  }
   if (event.target.closest(".ms")) return;
   for (const open of document.querySelectorAll(".ms.open")) {
     if (open.dataset.context === "row") {
@@ -670,6 +683,8 @@ function onDocumentKeyDown(event) {
     closeNewIssueModal();
   } else if (event.key === "Escape" && !els.deleteConfirmModal.classList.contains("hidden")) {
     closeDeleteConfirmModal();
+  } else if (event.key === "Escape" && els.chatModal && !els.chatModal.classList.contains("hidden")) {
+    closeChatModal();
   }
 }
 
@@ -948,6 +963,44 @@ function closeNewIssueModal() {
 function closeDeleteConfirmModal() {
   state.deletingId = "";
   els.deleteConfirmModal.classList.add("hidden");
+}
+
+function openChatModal() {
+  if (!els.chatModal) return;
+  els.chatModal.classList.remove("hidden");
+  if (els.chatMessages && !els.chatMessages.childElementCount) {
+    addBotMessage("Ask any trend question. I will reply with one-paragraph summary.");
+  }
+  if (els.chatInput) els.chatInput.focus();
+}
+
+function closeChatModal() {
+  if (!els.chatModal) return;
+  els.chatModal.classList.add("hidden");
+}
+
+async function onChatSubmit(event) {
+  event.preventDefault();
+  const prompt = String(els.chatInput?.value || "").trim();
+  if (!prompt) return;
+  if (els.chatInput) els.chatInput.value = "";
+  addUserMessage(prompt);
+  const thinkingEl = addBotMessage("Analyzing...");
+  try {
+    const res = await fetch("/api/analytics/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ prompt })
+    });
+    const data = await safeJson(res);
+    if (!data.ok) {
+      updateBotMessage(thinkingEl, data.error || "Failed to analyze prompt.");
+      return;
+    }
+    updateBotMessage(thinkingEl, String(data.answer || "No answer returned."));
+  } catch (error) {
+    updateBotMessage(thinkingEl, String(error?.message || error));
+  }
 }
 
 async function onNewIssueSubmit(event) {
@@ -1491,4 +1544,30 @@ function formatLastUpdated(input) {
     minute: "2-digit",
     hour12: true
   });
+}
+
+function addUserMessage(text) {
+  if (!els.chatMessages) return;
+  els.chatMessages.insertAdjacentHTML(
+    "beforeend",
+    `<div class="chat-msg user"><span>${escapeHtml(text)}</span></div>`
+  );
+  els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+}
+
+function addBotMessage(text) {
+  if (!els.chatMessages) return null;
+  els.chatMessages.insertAdjacentHTML(
+    "beforeend",
+    `<div class="chat-msg bot"><span>${escapeHtml(text).replaceAll("\n", "<br>")}</span></div>`
+  );
+  const messageNode = els.chatMessages.lastElementChild;
+  els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+  return messageNode;
+}
+
+function updateBotMessage(messageNode, text) {
+  const span = messageNode?.querySelector("span");
+  if (span) span.innerHTML = escapeHtml(String(text || "")).replaceAll("\n", "<br>");
+  if (els.chatMessages) els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
 }
