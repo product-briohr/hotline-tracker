@@ -26,10 +26,42 @@
       </header>
 
       <section class="analytics-grid">
+        <article class="analytics-card analytics-kpi-card">
+          <h2>Weekly & Monthly Snapshot</h2>
+          <div id="kpiGrid" class="kpi-grid"></div>
+        </article>
+
         <article class="analytics-card">
           <h2>Issue Type Recurrence</h2>
           <div id="issueTypeBars" class="issue-type-bars"></div>
         </article>
+
+        <article class="analytics-card">
+          <h2>Weekly Trend (Current vs Previous Week)</h2>
+          <div id="weeklyTrend" class="trend-table"></div>
+        </article>
+
+        <article class="analytics-card">
+          <h2>Monthly Trend (Current vs Previous Month)</h2>
+          <div id="monthlyTrend" class="trend-table"></div>
+        </article>
+
+        <article class="analytics-card analytics-full-span">
+          <h2>Issue Summary by Period</h2>
+          <div class="breakdown-mode-toggle" role="tablist" aria-label="Trend grouping">
+            <button id="breakdownMonthBtn" class="btn breakdown-mode-btn is-active" type="button" aria-pressed="true">
+              By Month
+            </button>
+            <button id="breakdownWeekBtn" class="btn breakdown-mode-btn" type="button" aria-pressed="false">
+              By Week
+            </button>
+            <button id="breakdownYearBtn" class="btn breakdown-mode-btn" type="button" aria-pressed="false">
+              By Year
+            </button>
+          </div>
+          <div id="moduleTypeBreakdown" class="period-summary-list"></div>
+        </article>
+
       </section>
     </main>
 
