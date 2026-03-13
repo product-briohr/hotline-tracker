@@ -73,7 +73,7 @@ Note: for private repos on Netlify free plan, deploys are blocked for unrecogniz
 
 ## 7) How sync works
 
-- Scheduled function runs weekdays at `05:00 UTC` (1:00 PM MYT).
+- Scheduled functions run weekdays at `05:00 UTC` (1:00 PM MYT) and `05:30 UTC` (1:30 PM MYT).
 - Scheduled sync can post pass/fail status to Slack when `SLACK_SYNC_WEBHOOK_URL` is set.
 - It scans Drive folder (+ subfolders), picks latest matching doc, and skips already processed files.
 - Manual sync available via UI button (`Sync Now`).
