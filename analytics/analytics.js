@@ -1,6 +1,8 @@
 const THEME_KEY = "hotline-theme";
 const els = {
   themeToggle: document.querySelector("#themeToggle"),
+  analyticsWip: document.querySelector("#analyticsWip"),
+  analyticsContent: document.querySelector("#analyticsContent"),
   issueTypeBars: document.querySelector("#issueTypeBars"),
   kpiGrid: document.querySelector("#kpiGrid"),
   weeklyTrend: document.querySelector("#weeklyTrend"),
@@ -24,6 +26,10 @@ async function init() {
   }
   applySavedTheme();
   els.themeToggle.addEventListener("click", toggleTheme);
+  if (!isLocalhostAnalytics()) {
+    showWipMode();
+    return;
+  }
   els.breakdownMonthBtn?.addEventListener("click", () => setBreakdownMode("month"));
   els.breakdownWeekBtn?.addEventListener("click", () => setBreakdownMode("week"));
   els.breakdownYearBtn?.addEventListener("click", () => setBreakdownMode("year"));
@@ -33,6 +39,16 @@ async function init() {
   renderWeeklyTrend();
   renderMonthlyTrend();
   renderModuleTypeBreakdown();
+}
+
+function isLocalhostAnalytics() {
+  const host = String(window.location.hostname || "").toLowerCase();
+  return host === "localhost" || host === "127.0.0.1" || host === "::1";
+}
+
+function showWipMode() {
+  els.analyticsWip?.classList.remove("hidden");
+  els.analyticsContent?.classList.add("hidden");
 }
 
 function setBreakdownMode(mode) {
