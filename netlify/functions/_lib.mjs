@@ -412,7 +412,7 @@ Meeting notes:
 }
 
 function normalizeRow(row, defaultDate) {
-  const description = String(row?.description || "").trim();
+  const description = stripBracketedNoteText(row?.description);
   const inferred = inferFieldsFromDescription(description);
   const normalized = {
     date: normalizeDate(row?.date, defaultDate),
@@ -534,7 +534,7 @@ export function sanitizeEditableRow(input) {
     issueType: normalizeEnumMulti(input?.issueType, ISSUE_TYPES, "Question/Troubleshooting"),
     cs: normalizeEnumMulti(input?.cs, CS_LIST, ""),
     pmOwner: normalizeEnumMulti(input?.pmOwner, PM_OWNERS, ""),
-    description: String(input?.description || "").trim(),
+    description: stripBracketedNoteText(input?.description),
     comments: String(input?.comments || "").trim().slice(0, 2000)
   };
 }
@@ -560,10 +560,12 @@ function normalizeEnumMulti(input, allowed, fallback) {
 
 export function reclassifyRowByDescription(row, options = {}) {
   const overwriteActors = options.overwriteActors !== false;
-  const inferred = inferFieldsFromDescription(row?.description || "");
+  const cleanedDescription = stripBracketedNoteText(row?.description);
+  const inferred = inferFieldsFromDescription(cleanedDescription);
 
   return {
     ...row,
+    description: cleanedDescription,
     module: inferred.module || row.module || "Others/General",
     issueType: inferred.issueType || row.issueType || "Question/Troubleshooting",
     cs: overwriteActors ? (inferred.cs || row.cs || "") : row.cs || inferred.cs || "",
@@ -870,9 +872,11 @@ function extractDetailsSectionText(notesText) {
 }
 
 function enrichWithInference(row, precomputedInference) {
-  const inferred = precomputedInference || inferFieldsFromDescription(row.description);
+  const cleanedDescription = stripBracketedNoteText(row?.description);
+  const inferred = precomputedInference || inferFieldsFromDescription(cleanedDescription);
   return {
     ...row,
+    description: cleanedDescription,
     module: row.module === "Others/General" && inferred.module ? inferred.module : row.module,
     issueType:
       row.issueType === "Question/Troubleshooting" && inferred.issueType
@@ -884,7 +888,7 @@ function enrichWithInference(row, precomputedInference) {
 }
 
 function inferFieldsFromDescription(description) {
-  const text = String(description || "");
+  const text = stripBracketedNoteText(description);
   const module = inferModuleFromDescription(text);
 
   let issueType = "";
@@ -907,6 +911,15 @@ function inferFieldsFromDescription(description) {
     cs: participants.cs,
     pmOwner
   };
+}
+
+function stripBracketedNoteText(input) {
+  let text = String(input || "").replace(/\r/g, " ");
+  // Remove all bracketed note markers, e.g. [], [i], [j, k], [ref]
+  text = text.replace(/\[[^\]]*]/g, " ");
+  text = text.replace(/\s+([,.;:!?])/g, "$1");
+  text = text.replace(/\s+/g, " ").trim();
+  return text;
 }
 
 function inferModuleFromDescription(description) {

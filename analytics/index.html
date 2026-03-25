@@ -4,6 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Analytics - Product Hotline Tracker</title>
+    <script>
+      (function () {
+        const host = String(window.location.hostname || "").toLowerCase();
+        const isLocal = host === "localhost" || host === "127.0.0.1" || host === "::1";
+        document.documentElement.classList.add(isLocal ? "analytics-local" : "analytics-wip-mode");
+      })();
+    </script>
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
@@ -25,12 +32,11 @@
         </div>
       </header>
 
-      <section id="analyticsWip" class="analytics-wip hidden" aria-live="polite">
+      <section id="analyticsWip" class="analytics-wip" aria-live="polite">
         <div class="analytics-wip-card">
-          <div class="analytics-wip-spinner" aria-hidden="true"></div>
+          <div class="analytics-wip-icon" aria-hidden="true">🚧</div>
           <h2>Analytics Work in Progress</h2>
-          <p>We are actively improving this page for production. Please check back soon.</p>
-          <div class="analytics-wip-bar"></div>
+          <p>We are actively improving this page for production. Will be available soon.</p>
         </div>
       </section>
 
