@@ -65,23 +65,35 @@ function setBreakdownMode(mode) {
 
 async function fetchAllRows() {
   const pageSize = 100;
-  let page = 1;
-  let totalPages = 1;
-  const rows = [];
+  const firstQs = new URLSearchParams({
+    page: "1",
+    pageSize: String(pageSize)
+  });
+  const firstRes = await fetch(`/api/issues?${firstQs.toString()}`, { cache: "no-store" });
+  const firstData = await safeJson(firstRes);
+  if (!firstData.ok) throw new Error(firstData.error || "Failed to load analytics data");
 
-  while (page <= totalPages) {
+  const rows = Array.isArray(firstData.rows) ? [...firstData.rows] : [];
+  const totalPages = Math.max(1, Number(firstData?.pagination?.totalPages || 1));
+  if (totalPages <= 1) return rows;
+
+  const requests = [];
+  for (let page = 2; page <= totalPages; page += 1) {
     const qs = new URLSearchParams({
       page: String(page),
       pageSize: String(pageSize)
     });
-    const res = await fetch(`/api/issues?${qs.toString()}`, { cache: "no-store" });
-    const data = await safeJson(res);
-    if (!data.ok) throw new Error(data.error || "Failed to load analytics data");
-    totalPages = Math.max(1, Number(data?.pagination?.totalPages || 1));
-    rows.push(...(data.rows || []));
-    page += 1;
+    requests.push(
+      fetch(`/api/issues?${qs.toString()}`, { cache: "no-store" }).then(async (res) => {
+        const data = await safeJson(res);
+        if (!data.ok) throw new Error(data.error || `Failed to load analytics page ${page}`);
+        return Array.isArray(data.rows) ? data.rows : [];
+      })
+    );
   }
-  return rows;
+
+  const pages = await Promise.all(requests);
+  return rows.concat(...pages);
 }
 
 function renderIssueTypeBars() {

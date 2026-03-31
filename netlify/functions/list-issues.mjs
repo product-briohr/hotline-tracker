@@ -9,6 +9,7 @@ import {
 } from "./_lib.mjs";
 
 const { CS_LIST } = ENUMS;
+const expandedRowsCache = new WeakMap();
 
 export default async (request) => {
   try {
@@ -29,7 +30,7 @@ export default async (request) => {
 
     const store = getDataStore();
     const all = await loadIssues(store, { dateFrom, dateTo });
-    const expanded = explodeRowsByDescriptionBullets(all);
+    const expanded = getExpandedRows(all);
     const lastEditedAt = getLatestUpdatedAt(expanded);
     const lastAutoSyncAt = await getLastAutoSyncAt(store);
 
@@ -82,6 +83,15 @@ function readMultiFilter(url, key) {
     }
   }
   return Array.from(new Set(values));
+}
+
+function getExpandedRows(rows) {
+  if (!Array.isArray(rows)) return [];
+  const cached = expandedRowsCache.get(rows);
+  if (cached) return cached;
+  const expanded = explodeRowsByDescriptionBullets(rows);
+  expandedRowsCache.set(rows, expanded);
+  return expanded;
 }
 
 function compareRowsByLatestDate(a, b) {

@@ -58,6 +58,18 @@ const CS_LIST = [
 ];
 
 const PM_OWNERS = ["Amir", "Idris Ashari", "Nita Puspita", "Nico"];
+const ISSUE_CACHE_TTL_MS = 1000 * 60 * 5;
+const issuesCache = {
+  partitions: null,
+  partitionsLoadedAt: 0,
+  rowsByPartition: new Map(),
+  rowsByPartitionLoadedAt: new Map(),
+  allRows: null,
+  allRowsLoadedAt: 0,
+  lastAutoSyncAt: "",
+  lastAutoSyncLoadedAt: 0
+};
+
 const PM_OWNER_BY_MODULE = {
   "Claims": "Amir",
   "Document Management": "Amir",
@@ -577,23 +589,37 @@ export function reclassifyRowByDescription(row, options = {}) {
 export async function loadIssues(store, options = {}) {
   const dateFrom = String(options?.dateFrom || "").trim();
   const dateTo = String(options?.dateTo || "").trim();
-  const partitions = await getIssuePartitions(store);
-  if (partitions.length) {
-    const selectedPartitions = filterPartitionsByDateRange(partitions, dateFrom, dateTo);
-    if (!selectedPartitions.length) return [];
-
-    const chunks = await Promise.all(
-      selectedPartitions.map(async (partition) => {
-        const rows = await store.get(issuePartitionKey(partition), { type: "json" });
-        return Array.isArray(rows) ? rows : [];
-      })
-    );
-    return chunks.flat();
+  const partitions = await getCachedIssuePartitions(store);
+  if (!partitions.length) {
+    const legacy = await loadLegacyIssues(store);
+    return filterRowsByDateRange(legacy, dateFrom, dateTo);
   }
 
-  // Backward-compatible fallback for legacy single-blob storage.
-  const legacy = await store.get("issues", { type: "json" });
-  return Array.isArray(legacy) ? legacy : [];
+  const selectedPartitions = filterPartitionsByDateRange(partitions, dateFrom, dateTo);
+  if (!selectedPartitions.length) return [];
+
+  const allSelected =
+    selectedPartitions.length === partitions.length &&
+    selectedPartitions.every((partition, idx) => partition === partitions[idx]);
+  if (allSelected) {
+    const allRows = await loadAllIssues(store, partitions);
+    return filterRowsByDateRange(allRows, dateFrom, dateTo);
+  }
+
+  const chunks = await Promise.all(selectedPartitions.map((partition) => loadPartitionRows(store, partition)));
+  return filterRowsByDateRange(chunks.flat(), dateFrom, dateTo);
+}
+
+async function loadAllIssues(store, partitions) {
+  if (issuesCache.allRows && Date.now() - issuesCache.allRowsLoadedAt < ISSUE_CACHE_TTL_MS) {
+    return issuesCache.allRows;
+  }
+
+  const chunks = await Promise.all(partitions.map((partition) => loadPartitionRows(store, partition)));
+  const rows = chunks.flat();
+  issuesCache.allRows = rows;
+  issuesCache.allRowsLoadedAt = Date.now();
+  return rows;
 }
 
 export async function saveIssues(store, rows) {
@@ -610,16 +636,65 @@ export async function saveIssues(store, rows) {
   await store.setJSON("issues:partitions", partitions);
   // Prevent duplicate reads once partitioned storage is active.
   await store.setJSON("issues", []);
+  issuesCache.partitions = partitions;
+  issuesCache.partitionsLoadedAt = Date.now();
+  issuesCache.rowsByPartition = new Map(
+    partitions.map((partition) => [partition, grouped[partition] || []])
+  );
+  issuesCache.rowsByPartitionLoadedAt = new Map(
+    partitions.map((partition) => [partition, Date.now()])
+  );
+  issuesCache.allRows = safeRows;
+  issuesCache.allRowsLoadedAt = Date.now();
 }
 
 function issuePartitionKey(partition) {
   return `issues:${partition}`;
 }
 
-async function getIssuePartitions(store) {
+async function getCachedIssuePartitions(store) {
+  if (issuesCache.partitions && Date.now() - issuesCache.partitionsLoadedAt < ISSUE_CACHE_TTL_MS) {
+    return issuesCache.partitions;
+  }
   const value = await store.get("issues:partitions", { type: "json" });
-  if (!Array.isArray(value)) return [];
-  return value.filter((v) => /^\d{4}-\d{2}$/.test(String(v || "")));
+  const partitions = Array.isArray(value) ? value.filter((v) => /^\d{4}-\d{2}$/.test(String(v || ""))) : [];
+  issuesCache.partitions = partitions;
+  issuesCache.partitionsLoadedAt = Date.now();
+  return partitions;
+}
+
+async function loadPartitionRows(store, partition) {
+  const cached = issuesCache.rowsByPartition.get(partition);
+  const cachedAt = Number(issuesCache.rowsByPartitionLoadedAt.get(partition) || 0);
+  if (cached && Date.now() - cachedAt < ISSUE_CACHE_TTL_MS) {
+    return cached;
+  }
+  const rows = await store.get(issuePartitionKey(partition), { type: "json" });
+  const safeRows = Array.isArray(rows) ? rows : [];
+  issuesCache.rowsByPartition.set(partition, safeRows);
+  issuesCache.rowsByPartitionLoadedAt.set(partition, Date.now());
+  return safeRows;
+}
+
+async function loadLegacyIssues(store) {
+  if (issuesCache.allRows && Date.now() - issuesCache.allRowsLoadedAt < ISSUE_CACHE_TTL_MS) {
+    return issuesCache.allRows;
+  }
+  const value = await store.get("issues", { type: "json" });
+  const rows = Array.isArray(value) ? value : [];
+  issuesCache.allRows = rows;
+  issuesCache.allRowsLoadedAt = Date.now();
+  return rows;
+}
+
+function filterRowsByDateRange(rows, dateFrom, dateTo) {
+  if (!dateFrom && !dateTo) return rows;
+  return rows.filter((row) => {
+    const date = String(row?.date || "");
+    if (dateFrom && date < dateFrom) return false;
+    if (dateTo && date > dateTo) return false;
+    return true;
+  });
 }
 
 function groupRowsByPartition(rows) {
@@ -674,10 +749,21 @@ export async function markProcessed(store, fileId) {
 
 export async function markAutoSyncSuccess(store, isoTime = new Date().toISOString()) {
   await store.set("meta:lastAutoSyncAt", String(isoTime));
+  issuesCache.lastAutoSyncAt = String(isoTime);
+  issuesCache.lastAutoSyncLoadedAt = Date.now();
 }
 
 export async function getLastAutoSyncAt(store) {
-  return String((await store.get("meta:lastAutoSyncAt")) || "");
+  if (
+    issuesCache.lastAutoSyncAt &&
+    Date.now() - issuesCache.lastAutoSyncLoadedAt < ISSUE_CACHE_TTL_MS
+  ) {
+    return issuesCache.lastAutoSyncAt;
+  }
+  const value = String((await store.get("meta:lastAutoSyncAt")) || "");
+  issuesCache.lastAutoSyncAt = value;
+  issuesCache.lastAutoSyncLoadedAt = Date.now();
+  return value;
 }
 
 export function toIsoDate(dateInput) {

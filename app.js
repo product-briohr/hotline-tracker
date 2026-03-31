@@ -119,7 +119,10 @@ const state = {
     from: "",
     to: ""
   },
-  datePicker: null
+  datePicker: null,
+  filterReloadTimer: 0,
+  loadAbortController: null,
+  loadRequestSeq: 0
 };
 
 init();
@@ -189,40 +192,61 @@ async function safeJson(res) {
 
 async function loadRows(options = {}) {
   const qs = buildIssueQueryParams({ page: state.page, pageSize: state.pageSize });
-
-  const res = await fetch(`/api/issues?${qs.toString()}`);
-  const data = await safeJson(res);
-  if (!data.ok) {
-    els.toast.style.color = "var(--danger)";
-    els.toast.textContent = `Failed to load: ${data.error || "Unknown error"}`;
-    return;
+  if (state.loadAbortController) {
+    state.loadAbortController.abort();
   }
+  const controller = new AbortController();
+  const requestSeq = state.loadRequestSeq + 1;
+  state.loadAbortController = controller;
+  state.loadRequestSeq = requestSeq;
 
-  const rows = data.rows || [];
-  state.currentRows = rows;
-  state.rowsById = new Map(rows.map((row) => [row.id, row]));
-  state.totalPages = Math.max(1, Number(data?.pagination?.totalPages || 1));
-  state.totalCount = Number(data?.count || 0);
-  state.pageSize = Math.max(1, Number(data?.pagination?.pageSize || state.pageSize || DEFAULT_PAGE_SIZE));
-  if (els.pageSizeSelect.value !== String(state.pageSize)) {
-    els.pageSizeSelect.value = String(state.pageSize);
-  }
-  els.lastUpdated.textContent = `Last auto sync: ${formatLastUpdated(data?.lastAutoSyncAt)}`;
-  state.page = Math.min(Math.max(1, Number(data?.pagination?.page || state.page)), state.totalPages);
-  if (state.page > state.totalPages) state.page = state.totalPages;
-
-  renderPageNumbers();
-  if (!options.preserveToast) {
-    els.toast.textContent = "";
-  }
-  renderTable();
-  if (state.scrollToTableOnNextLoad) {
-    const tableWrap = document.querySelector(".table-wrap");
-    if (tableWrap) {
-      const top = tableWrap.getBoundingClientRect().top + window.scrollY - 12;
-      window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+  try {
+    const res = await fetch(`/api/issues?${qs.toString()}`, {
+      signal: controller.signal,
+      cache: "no-store"
+    });
+    const data = await safeJson(res);
+    if (requestSeq !== state.loadRequestSeq) return;
+    if (!data.ok) {
+      els.toast.style.color = "var(--danger)";
+      els.toast.textContent = `Failed to load: ${data.error || "Unknown error"}`;
+      return;
     }
-    state.scrollToTableOnNextLoad = false;
+
+    const rows = data.rows || [];
+    state.currentRows = rows;
+    state.rowsById = new Map(rows.map((row) => [row.id, row]));
+    state.totalPages = Math.max(1, Number(data?.pagination?.totalPages || 1));
+    state.totalCount = Number(data?.count || 0);
+    state.pageSize = Math.max(1, Number(data?.pagination?.pageSize || state.pageSize || DEFAULT_PAGE_SIZE));
+    if (els.pageSizeSelect.value !== String(state.pageSize)) {
+      els.pageSizeSelect.value = String(state.pageSize);
+    }
+    els.lastUpdated.textContent = `Last auto sync: ${formatLastUpdated(data?.lastAutoSyncAt)}`;
+    state.page = Math.min(Math.max(1, Number(data?.pagination?.page || state.page)), state.totalPages);
+    if (state.page > state.totalPages) state.page = state.totalPages;
+
+    renderPageNumbers();
+    if (!options.preserveToast) {
+      els.toast.textContent = "";
+    }
+    renderTable();
+    if (state.scrollToTableOnNextLoad) {
+      const tableWrap = document.querySelector(".table-wrap");
+      if (tableWrap) {
+        const top = tableWrap.getBoundingClientRect().top + window.scrollY - 12;
+        window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+      }
+      state.scrollToTableOnNextLoad = false;
+    }
+  } catch (error) {
+    if (error?.name === "AbortError") return;
+    els.toast.style.color = "var(--danger)";
+    els.toast.textContent = `Failed to load: ${String(error?.message || error)}`;
+  } finally {
+    if (state.loadAbortController === controller) {
+      state.loadAbortController = null;
+    }
   }
 }
 
@@ -245,6 +269,14 @@ function buildIssueQueryParams({ page, pageSize }) {
   qs.set("page", String(Math.max(1, Number(page || 1))));
   qs.set("pageSize", String(Math.max(1, Number(pageSize || DEFAULT_PAGE_SIZE))));
   return qs;
+}
+
+function scheduleFilterReload() {
+  window.clearTimeout(state.filterReloadTimer);
+  state.filterReloadTimer = window.setTimeout(() => {
+    state.filterReloadTimer = 0;
+    goToPage(1);
+  }, 120);
 }
 
 async function exportFilteredRowsToExcel() {
@@ -276,7 +308,7 @@ async function exportFilteredRowsToExcel() {
 async function fetchAllFilteredRows() {
   const pageSize = 100;
   const firstQs = buildIssueQueryParams({ page: 1, pageSize });
-  const firstRes = await fetch(`/api/issues?${firstQs.toString()}`);
+  const firstRes = await fetch(`/api/issues?${firstQs.toString()}`, { cache: "no-store" });
   const firstData = await safeJson(firstRes);
   if (!firstData.ok) {
     throw new Error(firstData.error || "Failed to load rows for export");
@@ -286,16 +318,21 @@ async function fetchAllFilteredRows() {
   const totalPages = Math.max(1, Number(firstData?.pagination?.totalPages || 1));
   if (totalPages <= 1) return allRows;
 
+  const pageRequests = [];
   for (let page = 2; page <= totalPages; page += 1) {
     const qs = buildIssueQueryParams({ page, pageSize });
-    const res = await fetch(`/api/issues?${qs.toString()}`);
-    const data = await safeJson(res);
-    if (!data.ok) {
-      throw new Error(data.error || `Failed while exporting page ${page}`);
-    }
-    if (Array.isArray(data.rows)) allRows.push(...data.rows);
+    pageRequests.push(
+      fetch(`/api/issues?${qs.toString()}`, { cache: "no-store" }).then(async (res) => {
+        const data = await safeJson(res);
+        if (!data.ok) {
+          throw new Error(data.error || `Failed while exporting page ${page}`);
+        }
+        return Array.isArray(data.rows) ? data.rows : [];
+      })
+    );
   }
-  return allRows;
+  const pages = await Promise.all(pageRequests);
+  return allRows.concat(...pages);
 }
 
 function toCsv(rows) {
@@ -1367,11 +1404,13 @@ function onFilterClick(event) {
     else selected.add(value);
     state.filterValues[field] = Array.from(selected);
     refreshMultiSelectVisual(cell, field, state.filterValues[field]);
-    goToPage(1);
+    scheduleFilterReload();
   }
 }
 
 function clearAllFilters() {
+  window.clearTimeout(state.filterReloadTimer);
+  state.filterReloadTimer = 0;
   els.search.value = "";
   state.dateRange = { from: "", to: "" };
   if (state.datePicker) state.datePicker.clear();
