@@ -12,7 +12,8 @@ export default async (request) => {
   if (authError) return authError;
   const url = new URL(request.url);
   const force = ["1", "true", "yes"].includes((url.searchParams.get("force") || "").toLowerCase());
-  return runSyncOnce({ force });
+  const targetDate = normalizeTargetDate(url.searchParams.get("date"));
+  return runSyncOnce({ force, targetDate });
 };
 
 function assertSyncAuth(request) {
@@ -25,4 +26,9 @@ function assertSyncAuth(request) {
     return json(401, { ok: false, error: "Unauthorized" });
   }
   return null;
+}
+
+function normalizeTargetDate(input) {
+  const value = String(input || "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : "";
 }

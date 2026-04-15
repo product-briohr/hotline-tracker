@@ -856,6 +856,27 @@ export function matchesKeywords(name) {
   return text.toLowerCase().includes(keyword) && !isTranscriptionFileName(text);
 }
 
+function extractDateFromFileName(name) {
+  const text = String(name || "");
+  const slashMatch = text.match(/\b(20\d{2})\/(\d{2})\/(\d{2})\b/);
+  if (slashMatch) {
+    return `${slashMatch[1]}-${slashMatch[2]}-${slashMatch[3]}`;
+  }
+  const dashMatch = text.match(/\b(20\d{2})-(\d{2})-(\d{2})\b/);
+  if (dashMatch) {
+    return `${dashMatch[1]}-${dashMatch[2]}-${dashMatch[3]}`;
+  }
+  return "";
+}
+
+function matchesTargetDate(file, targetDate) {
+  const target = String(targetDate || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(target)) return true;
+  const fileNameDate = extractDateFromFileName(file?.name);
+  if (fileNameDate) return fileNameDate === target;
+  return toIsoDate(file?.modifiedTime) === target;
+}
+
 function fallbackRowsFromNotes(notesText, dateIso) {
   const items = extractIssueItems(notesText);
   const candidates = items
@@ -1451,6 +1472,7 @@ export async function runSyncOnce(options = {}) {
   const notifySlack = options?.notifySlack === true;
   const trigger = String(options?.trigger || "manual").trim();
   const force = options?.force === true;
+  const targetDate = String(options?.targetDate || "").trim();
   const syncedAt = new Date().toISOString();
   try {
     const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
@@ -1461,10 +1483,22 @@ export async function runSyncOnce(options = {}) {
     const drive = getDriveClient();
     const store = getDataStore();
     const files = await listDocsRecursively(drive, folderId);
-    const candidates = files.filter((f) => matchesKeywords(f.name));
+    const candidates = files
+      .filter((f) => matchesKeywords(f.name))
+      .filter((f) => matchesTargetDate(f, targetDate));
     if (!candidates.length) {
       await markAutoSyncSuccess(store);
-      return makeSyncResponse(200, { ok: true, inserted: 0, message: "No matching notes file found." }, { notifySlack, trigger, syncedAt });
+      return makeSyncResponse(
+        200,
+        {
+          ok: true,
+          inserted: 0,
+          message: targetDate
+            ? `No matching notes file found for ${targetDate}.`
+            : "No matching notes file found."
+        },
+        { notifySlack, trigger, syncedAt }
+      );
     }
     let issues = await loadIssues(store);
     const stamped = [];
