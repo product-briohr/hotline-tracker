@@ -1,4 +1,4 @@
-import { assertPasswordGate, getDataStore, json, loadIssues } from "./_lib.mjs";
+import { assertPasswordGate, excludeTranscriptionRows, getDataStore, json, loadIssues } from "./_lib.mjs";
 
 const MONTHS = {
   january: 1,
@@ -41,7 +41,7 @@ export default async (request) => {
     if (!prompt) return json(400, { ok: false, error: "Missing prompt" });
 
     const store = getDataStore();
-    const rows = await loadIssues(store);
+    const rows = excludeTranscriptionRows(await loadIssues(store));
     const filters = extractPromptFilters(prompt);
     const scopedRows = applyPromptFilters(rows, filters);
     const targetRows = scopedRows.length ? scopedRows : rows;

@@ -58,6 +58,11 @@ const CS_LIST = [
 ];
 
 const PM_OWNERS = ["Amir", "Idris Ashari", "Nita Puspita", "Nico"];
+const TRANSCRIPTION_FILE_RE = /\b(?:meeting\s+)?transcript(?:ion)?\b/i;
+const TRANSCRIPTION_SECTION_HEADER_RE =
+  /^(?:(?:meeting|call)\s+)?transcript(?:ion)?$|^full\s+transcript$|^meeting\s+recording\s+transcript$/i;
+const TRANSCRIPTION_SECTION_END_RE =
+  /^(?:gemini\s+)?details?$|^summary$|^suggested\s+next\s+steps?$|^action\s+items?$|^attendees?$|^participants?$|^follow[- ]?ups?$|^decisions?$|^notes$/i;
 const ISSUE_CACHE_TTL_MS = 1000 * 60 * 5;
 const issuesCache = {
   partitions: null,
@@ -766,6 +771,14 @@ export async function getLastAutoSyncAt(store) {
   return value;
 }
 
+export function isTranscriptionFileName(name) {
+  return TRANSCRIPTION_FILE_RE.test(String(name || ""));
+}
+
+export function excludeTranscriptionRows(rows) {
+  return (rows || []).filter((row) => !isTranscriptionFileName(row?.sourceFileName || ""));
+}
+
 export function toIsoDate(dateInput) {
   const d = new Date(dateInput || new Date());
   const y = d.getUTCFullYear();
@@ -839,7 +852,8 @@ function monthNameToNumber(input) {
 
 export function matchesKeywords(name) {
   const keyword = (process.env.MEETING_KEYWORD || "Product Hotline").toLowerCase();
-  return String(name || "").toLowerCase().includes(keyword);
+  const text = String(name || "");
+  return text.toLowerCase().includes(keyword) && !isTranscriptionFileName(text);
 }
 
 function fallbackRowsFromNotes(notesText, dateIso) {
@@ -878,7 +892,7 @@ function fallbackRowsFromNotes(notesText, dateIso) {
 }
 
 function extractIssueItems(notesText) {
-  const raw = String(notesText || "").replace(/\r/g, "");
+  const raw = stripTranscriptionSections(String(notesText || "").replace(/\r/g, ""));
   const lines = raw.split("\n");
   const items = [];
   let current = "";
@@ -927,7 +941,7 @@ function extractIssueItems(notesText) {
 }
 
 function extractDetailsSectionText(notesText) {
-  const raw = String(notesText || "").replace(/\r/g, "");
+  const raw = stripTranscriptionSections(String(notesText || "").replace(/\r/g, ""));
   const lines = raw
     .split("\n")
     .map((line) => line.trimEnd())
@@ -954,6 +968,39 @@ function extractDetailsSectionText(notesText) {
   }
 
   if (!found || !out.length) return raw;
+  return out.join("\n");
+}
+
+function stripTranscriptionSections(input) {
+  const raw = String(input || "").replace(/\r/g, "");
+  if (!raw) return "";
+
+  const out = [];
+  let inTranscript = false;
+
+  for (const lineRaw of raw.split("\n")) {
+    const line = String(lineRaw || "");
+    const header = line.trim().replace(/[:\-]\s*$/, "").trim();
+
+    if (!header) {
+      if (!inTranscript) out.push(lineRaw);
+      continue;
+    }
+
+    if (TRANSCRIPTION_SECTION_HEADER_RE.test(header)) {
+      inTranscript = true;
+      continue;
+    }
+
+    if (inTranscript && TRANSCRIPTION_SECTION_END_RE.test(header)) {
+      inTranscript = false;
+    }
+
+    if (!inTranscript) {
+      out.push(lineRaw);
+    }
+  }
+
   return out.join("\n");
 }
 
