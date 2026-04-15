@@ -628,7 +628,7 @@ async function loadAllIssues(store, partitions) {
 }
 
 export async function saveIssues(store, rows) {
-  const safeRows = Array.isArray(rows) ? rows : [];
+  const safeRows = sanitizeRows(Array.isArray(rows) ? rows : []);
   const grouped = groupRowsByPartition(safeRows);
   const partitions = Object.keys(grouped).sort();
 
@@ -675,7 +675,7 @@ async function loadPartitionRows(store, partition) {
     return cached;
   }
   const rows = await store.get(issuePartitionKey(partition), { type: "json" });
-  const safeRows = Array.isArray(rows) ? rows : [];
+  const safeRows = sanitizeRows(Array.isArray(rows) ? rows : []);
   issuesCache.rowsByPartition.set(partition, safeRows);
   issuesCache.rowsByPartitionLoadedAt.set(partition, Date.now());
   return safeRows;
@@ -686,7 +686,7 @@ async function loadLegacyIssues(store) {
     return issuesCache.allRows;
   }
   const value = await store.get("issues", { type: "json" });
-  const rows = Array.isArray(value) ? value : [];
+  const rows = sanitizeRows(Array.isArray(value) ? value : []);
   issuesCache.allRows = rows;
   issuesCache.allRowsLoadedAt = Date.now();
   return rows;
@@ -1050,9 +1050,19 @@ function stripBracketedNoteText(input) {
   let text = String(input || "").replace(/\r/g, " ");
   // Remove all bracketed note markers, e.g. [], [i], [j, k], [ref]
   text = text.replace(/\[[^\]]*]/g, " ");
+  // Remove pure meeting timestamp markers, e.g. (00:04:23) or (4:23).
+  text = text.replace(/\(\s*(?:\d{1,2}:)?\d{1,2}:\d{2}\s*\)/g, " ");
   text = text.replace(/\s+([,.;:!?])/g, "$1");
   text = text.replace(/\s+/g, " ").trim();
   return text;
+}
+
+function sanitizeRows(rows) {
+  return (rows || []).map((row) => ({
+    ...row,
+    description: stripBracketedNoteText(row?.description),
+    comments: stripBracketedNoteText(row?.comments)
+  }));
 }
 
 function inferModuleFromDescription(description) {
